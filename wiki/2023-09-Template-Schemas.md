@@ -19,11 +19,13 @@ Both Templates are expressed as UTF-8 documents in either
 Notations used in this document to annotate aspects of the schema definition:
 
 * `@fmtstring` - The value of the annotated property is a Format String. See [Format Strings](#73-format-strings).
-   * `@fmtstring[host]` - The value is evaluated at runtime on the worker host on which the job is running. The value is otherwise
+  * `@fmtstring[host]` - The value is evaluated at runtime on the worker host on which the job is running. The value is otherwise
      evaluated when the job template is submitted and the render manager is constructing a job.
 * `@optional` - The annotated property is optional.
 * `@extension EXTENSION_NAME` - The annotated property is available only when extension EXTENSION_NAME is requested
   in the `extensions` list of the template. Implementations can choose which extensions to support.
+* `@incompatible PROPERTY_NAME` - The annotated property cannot be used in
+combination with PROPERTY_NAME.
 
 ## 1. Root elements
 
@@ -46,7 +48,8 @@ Where:
 2. *$schema* — Ignored. This property is allowed for compatibility with JSON-editing IDEs.
 3. *extensions* — If provided, is a non-empty list of extensions to the schema. Introduced in [RFC 0002](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0002-model-extensions.md).
       * Extensions available for specification version 2023-09: [TASK_CHUNKING](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0001-task-chunking.md),
-         [REDACTED_ENV_VARS](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0003-redacted-env-vars.md)
+         [REDACTED_ENV_VARS](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0003-redacted-env-vars.md),
+         [FEATURE_BUNDLE_1](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0004-enhanced-limits-and-capabilities.md)
 4. *name* — The name to give to a Job that is created from the template. See: [&lt;JobName&gt;](#111-jobname).
 5. *description* — A description to apply to all Jobs that are created from the template. It has no functional purpose,
    but may appear in UI elements. See: [&lt;Description&gt;](#72-description).
@@ -55,7 +58,8 @@ Where:
    The values of Job Parameters can be referenced in Format Strings.
    See: [&lt;JobParameterDefinition&gt;](#2-jobparameterdefinition).
       * Minimum number of elements: If provided, then this list must contain at least one element.
-      * Maximum number of elements: The list must not contain more than 50 elements.
+      * Maximum number of elements: The list must not contain more than 50
+      elements or 100 elements with the `FEATURE_BUNDLE_1` extension.
 7. *jobEnvironments* — An ordered list of the environments that are required to run Tasks in the Jobs created by this Job
    Template. These are entered in the order provided at the start of every Session for Tasks in the Job, and exited in the
    reverse order at the end of those Sessions. See: [&lt;Environment&gt;](#4-environment). Constraints:
@@ -71,6 +75,8 @@ A [Format String](#73-format-strings) subject to the following constraints:
 1. Allowed characters: Any unicode character except those in the Cc unicode character category.
 2. Minimum length: 1 character.
 3. Maximum length: 128 characters, after the format string has been resolved.
+512 characters, after the format string has been resolved if using the
+`FEATURE_BUNDLE_1` extension.
 
 #### 1.1.2. `<ExtensionName>`
 
@@ -458,7 +464,8 @@ A string subject to the following constraints:
 
 1. Allowed characters: Any unicode character except those in the Cc unicode character category.
 2. Minimum length: 1 character.
-3. Maximum length: 64 characters.
+3. Maximum length: 64 characters. 512 characters if using the
+`FEATURE_BUNDLE_1` extension.
 
 ### 3.2. `<StepDependency>`
 
@@ -525,17 +532,24 @@ An `<AmountRequirement>` is the object:
 ```yaml
 name: <AmountCapabilityName>
 min: <nonnegativefloat> # @optional
+min: <nonnegativefloat> | <nonnegativefloatstring>  # @optional @fmtstring @extension FEATURE_BUNDLE_1
 max: <positivefloat> # @optional
+max: <positivefloat> | <positivefloatstring> # @optional @fmtstring @extension FEATURE_BUNDLE_1
 ```
 
-Where:
+Where:`<nonnegativefloatstring>` is a string whose value is the string
+representation of a non-zero and positive floating point or integer value in
+base-10, `<positivefloatstring>` is a string whose value is the string
+representation of a positive floating point or integer value in base-10, and:
 
 1. *name* — Is a dotted name that identifies the specific host capability that is being required.
 2. *min* — If provided, then the host must have at least the given amount of the named capability available and reserved
    for a Session running Tasks from this Step to be scheduled to the host. If not provided, then the default is 0 unless
-   the specific host capability defines a minimum.
+   the specific host capability defines a minimum. Can only be a
+   `<nonnegativefloatstring>` when using the extension `FEATURE_BUNDLE_1`.
 3. *max* — If provided, then the host must have at least the given amount of the named capability available and reserved
-   for a Session running Tasks from this Step to be scheduled to the host.
+   for a Session running Tasks from this Step to be scheduled to the host. Can
+   only be a `<positivefloatstring>` when using the extension `FEATURE_BUNDLE_1`.
 
 Subject to the constraint that at least one of *min* or *max* must be provided.
 
@@ -923,8 +937,9 @@ The Script of a Step defines the properties of the action that the Step runs on 
 A `<StepScript>` is the object:
 
 ```yaml
-actions: <StepActions>
-embeddedFiles: [ <EmbeddedFile>, ... ] # @optional
+actions: <StepActions> # @incompatible python | bash | cmd | powershell | node
+embeddedFiles: [ <EmbeddedFile>, ... ] # @optional @incompatible python | bash | cmd | powershell | node
+python | bash | cmd | powershell | node: <SimpleAction> # @optional @fmtstring[host] @incompatible command embeddedFiles @extension FEATURE_BUNDLE_1
 ```
 
 Where:
@@ -934,6 +949,8 @@ Where:
    Task is running within the Session. See: [&lt;EmbeddedFile&gt;](#6-embeddedfile).
    1. Minimum number of items: If defined, then there must be at least one element in this list.
    2. Maximum number of items: There is no limit on the number of elements in this list.
+3. *bash | cmd | node | powershell | python* - Syntactic sugar for scripts,
+   removes some commonly needed boilerplate for the given script interpreter.
 
 The format string scopes available to format strings within a `<StepScript>` are:
 
@@ -1007,7 +1024,8 @@ A string value subject to the following constraints:
 
 1. Allowable characters: Any unicode character except those in the Cc unicode character category.
 2. Minimum length: 1 characters.
-3. Maximum length: 64 characters.
+3. Maximum length: 64 characters. 512 characters if using the
+`FEATURE_BUNDLE_1` extension.
 
 ### 4.2. `<EnvironmentScript>`
 
@@ -1036,7 +1054,7 @@ onExit: <Action> # optional
 1. *onEnter* — The action run when the environment is being entered on a host.
 2. *onExit* — The action run when the environment is being exited on a host.
 
-   >   **NOTE:** When *onExit* action does not define a *timeout* the action will default to 300
+   > **NOTE:** When *onExit* action does not define a *timeout* the action will default to 300
    seconds, or five minutes. Job schedulers may provide the ability to cancel jobs/steps/tasks. A
    reasonable default expectation should be that OpenJobDescription sessions are able to end and
    cleanup within a bound amount of time.
@@ -1077,16 +1095,21 @@ An Action is a specific command with arguments that is run on a host. An `<Actio
 command: <CommandString> # @fmtstring[host]
 args: [ <ArgString>, ... ] # @optional @fmtstring[host]
 timeout: <posinteger> # @optional
+timeout: <posinteger> | <posintstring> # @optional @fmtstring @extension FEATURE_BUNDLE_1
 cancelation: <CancelationMethod> # @optional
 ```
+
+Where `<posintstring>` is a string whose value is the string representation of a
+positive integer value in base-10, and:
 
 1. *command* — A [Format String](#73-format-strings) containing the name of a runnable command that is run on a Worker
    host.
 2. *args* — An array of [Format Strings](#73-format-strings) that will be passed as arguments to the **command** when the
    command is run on the host.
 3. *timeout* — The positive number of seconds that the command is given to successfully run to completion. A command that
-   does not return before the timeout is canceled and is treated as a failed run.
-   
+   does not return before the timeout is canceled and is treated as a failed
+   run. Can only be a `<posintstring>` when using the extension `FEATURE_BUNDLE_1`.
+
    The default timeout, if not provided, depends on the action:
 
    | Action container | Action | Default |
@@ -1159,12 +1182,16 @@ A `<CancelationMethodNotifyThenTerminate>` is the object:
 ```yaml
 mode: "NOTIFY_THEN_TERMINATE"
 notifyPeriodInSeconds: <posinteger> # @optional
+notifyPeriodInSeconds: <posinteger> | <posintstring> # @optional @fmtstring @extension FEATURE_BUNDLE_1 # @optional
 ```
 
-Where:
+Where `<posintstring>` is a string whose value is the string representation of a
+positive integer value in base-10, and:
 
 1. *notifyPeriodInSeconds* — Defines the maximum number of seconds between the two signals. It is possible that the actual
-   duration allowed in a particular cancel event will be less than this amount if circumstances warrant.
+   duration allowed in a particular cancel event will be less than this amount
+   if circumstances warrant. Can only be a `<posintstring>` when using the
+   extension `FEATURE_BUNDLE_1`.
    1. Maximum value: 600
    2. Defaults:
       * 120 if the Action is the "onRun" action of a `<StepActions>` object.
@@ -1218,6 +1245,7 @@ type: "TEXT"
 filename: <Filename> # @optional
 runnable: <bool> # @optional
 data: <DataString> # @fmtstring[host]
+endOfLine: enum("AUTO", "LF", "CRLF") # @optional @extension FEATURE_BUNDLE_1
 ```
 
 * *name* — The name of the embeded file. This value is used in Format String references to this file.
@@ -1226,6 +1254,9 @@ data: <DataString> # @fmtstring[host]
 * *runnable* — A boolean `True` value indicates that the file written to disk should have its execute-permissions set
   to true. Defaults to `False` if not provided.
 * *data* — The string data that will be written to the file exactly as it appears.
+* *endOfLine* — The line endings that the embedded file will have when written
+to disk. If `AUTO` the embedded file will have the default line endings of the
+host operating system. Default is `AUTO`. Requires the `FEATURE_BUNDLE_1` extension.
 
 The fully-qualified path of the file written by the host can be referenced in format strings using the following names:
 
@@ -1237,8 +1268,10 @@ The fully-qualified path of the file written by the host can be referenced in fo
 A string subject to the following constraints:
 
 * Min length: 1
-* Max length: 64
+* Max length: 64. 256 if using extension `FEATURE_BUNDLE_1`.
 * Characters allowed: Any characters allowed in filenames on the host operating system.
+
+<a name="data-string"></a>
 
 #### 6.1.2. `<DataString>`
 
@@ -1259,7 +1292,7 @@ A string subject to the following constraints:
    * The underscore character ('_').
 2. Must start with a letter or underscore character.
 3. Minimum length: 1 character
-4. Maximum length: 64 character
+4. Maximum length: 64 characters. 512 characters if using extension `FEATURE_BUNDLE_1`.
 
 ### 7.2. `<Description>`
 
@@ -1310,25 +1343,222 @@ for the symbol `Param.Name` of "Bob", the resulting resolved string is
 |`Session.HasPathMappingRules`|This value can be used to determine whether path mapping rules are available to the Session. It is string valued, with values "true" or "false". "true" means that the path mapping JSON contains path mapping rules. "false" means that the contents of the path mapping JSON are the empty object.|This is available within all Environment Script Actions & Embedded Files, and all Step Script Actions and Embedded Files.|
 |`Session.PathMappingRulesFile`|This is a string whose value is the location of a JSON file on the worker node's local disk that contains the path mapping rule substitutions for the Session.|This is available within all Environment Script Actions & Embedded Files, and all Step Script Actions and Embedded Files.|
 
-## 8. Additional Information
+## 8. `<SimpleAction>`
+
+This object is only available in the extension `FEATURE_BUNDLE_1`
+
+A SimpleAction is syntactic sugar for a command with arguments that is run on
+a host. It removes some commonly needed boilerplate for the given script
+interpreter. In contrast to `<Action>`, `<SimpleAction>` removes the need for the
+`command` property, implicitly prefixes the `args` property, and removes the
+need for the `embeddedFiles` property.
+
+The behaviour of the syntactic sugar depends on the key it was specified with:
+
+* *bash* - Implicitly creates a Bash embedded file,
+`command` becomes `bash`, and `args` get prefixed with the implicitly
+generated file. The file extension is `.sh`. `bash` (all lowercase) is
+expected to be available in the runtime environment.
+
+  ```yaml
+  steps:
+    - name: BashStep
+      bash:
+        args: ["--additional-argument"] # optional
+        script: |
+          # bash code here
+  
+  ### syntax sugar equivalent to:
+
+  steps:
+    - name: BashStep
+      actions:
+          onRun:
+              command: bash
+              args: ["{{Task.File.<implicitly generated file>}}", "--additional-argument"]
+      embeddedFiles:
+          - name: <implicitly generated file>
+            filename: "<implicitly generated file>.sh"
+            type: TEXT
+            data:
+                # bash code here
+  ```
+
+* *cmd* - Implicitly creates a Batch embedded file,
+`command` becomes `cmd`, and `args` get prefixed with
+`["/C", "{{Task.File.<implicitly generated file>}}"]`. The file extension is
+`.bat`. `cmd` (all lowercase) is expected to be available in the runtime environment.
+
+  ```yaml
+  steps:
+    - name: CmdStep
+      cmd:
+        args: ["--additional-argument"] # optional
+        script: |
+          # batch code here
+
+  ### syntax sugar equivalent to:
+
+  steps:
+    - name: CmdStep
+      actions:
+          onRun:
+              command: cmd
+              args: ["/C", "{{Task.File.<implicitly generated file>}}", "--additional-argument"]
+      embeddedFiles:
+          - name: <implicitly generated file>
+            filename: "<implicitly generated file>.bat"
+            type: TEXT
+            data:
+                # batch code here
+  ```
+
+* *node* - Implicitly creates a JavaScript embedded file,
+`command` becomes `node`, and `args` get prefixed with the implicitly
+generated file. The file extension is `.js`. `node` (all lowercase) is
+expected to be available in the runtime environment.
+
+  ```yaml
+  steps:
+    - name: NodeStep
+      node:
+        args: ["--additional-argument"] # optional
+        script: |
+            # JavaScript code here
+
+  ### syntax sugar equivalent to:
+
+  steps:
+    - name: NodeStep
+      actions:
+          onRun:
+              command: node
+              args: ["{{Task.File.<implicitly generated file>}}", "--additional-argument"]
+      embeddedFiles:
+          - name: <implicitly generated file>
+            filename: "<implicitly generated file>.js"
+            type: TEXT
+            data:
+                # JavaScript code here
+  ```
+
+* *powershell* - Implicitly creates a Powershell embedded file,
+`command` becomes `powershell`, and `args` get prefixed with
+`["-File", "{{Task.File.<implicitly generated file>}}"]`.
+The file extension is `.ps1`. `powershell` (all lowercase) is
+expected to be available in the runtime environment.
+
+  ```yaml
+  steps:
+    - name: PowershellStep
+      powershell:
+        args: ["--additional-argument"] # optional
+        script: |
+            # powershell code here
+
+  ### syntax sugar equivalent to:
+
+  steps:
+    - name: PowershellStep
+      actions:
+          onRun:
+              command: powershell
+              args: ["-File", "{{Task.File.<implicitly generated file>}}", "--additional-argument"]
+      embeddedFiles:
+          - name: <implicitly generated file>
+            filename: "<implicitly generated file>.ps1"
+            type: TEXT
+            data:
+                # Powershell code here
+  ```
+
+* *python* - Implicitly creates a Python embedded file,
+`command` becomes `python`, and `args` get prefixed with the implicitly
+generated file. The file extension is `.py`. `python` (all lowercase) is
+expected to be available in the runtime environment.
+
+  ```yaml
+  steps: 
+    - name: PythonStep
+      python:
+        args: ["--additional-argument"] # optional
+            # python code here
+
+  ### syntax sugar equivalent to:
+
+  steps: 
+    - name: PythonStep
+      actions:
+          onRun:
+              command: python
+              args: ["{{Task.File.<implicitly generated file>}}", "--additional-argument"]
+      embeddedFiles:
+          - name: <implicitly generated file>
+            filename: "<implicitly generated file>.py"
+            type: TEXT
+            data:
+                # python code here
+  ```
+
+A `<SimpleAction>` is the object:
+
+```yaml
+script: <DataString> # @fmtstring[host]
+args: [ <ArgString>, ... ] # @optional @fmtstring[host]
+timeout: <posinteger> | <posintstring> # @optional @fmtstring
+cancelation: <CancelationMethod> # @optional
+```
+
+Where `<posintstring>` is a string whose value is the string representation of a
+positive integer value in base-10, and:
+
+1. *script* — The [Data String](#data-string) that will be written to the script
+   exactly as it appears.
+2. *args* — An array of [Format Strings](#73-format-strings) that will be passed
+   as arguments to the **command** when the command is run on the host.
+3. *timeout* — The positive number of seconds that the command is given to
+   successfully run to completion. A command that does not return before the
+   timeout is canceled and is treated as a failed run.
+
+   The default timeout, if not provided, depends on the action:
+
+   | Action container | Action | Default |
+   | --- | --- | --- |
+   | `<StepActions>` | `onRun` | *no timeout* |
+   | `<EnvironmentActions>` | `onEnter` | *no timeout* |
+   | `<EnvironmentActions>` | `onExit` | 300 seconds (five minutes) <sup>1</sup> |
+
+   <sup>1</sup> Environment exit actions are treated specially. Job schedulers
+   may provide the ability to cancel jobs, steps, and tasks. A reasonable
+   default expectation should be that OpenJobDescription sessions are able to
+   end and cleanup within a bound duration of time.
+
+4. *cancelation* — If defined, provides details regarding how this action should
+   be canceled. If not provided, then it is treated as though provided with `<CancelationMethodTerminate>`.
+
+The host uses the return code of the interpreter run to determine success or
+failure of the SimpleAction. A zero exit code indicates success, and any
+non-zero exit code indicates failure. A timeout also indicates failure.
+
+## 9. Additional Information
 
 * The Cc unicode character category is all [C0](https://www.unicode.org/charts/PDF/U0000.pdf)
   and [C1](https://www.unicode.org/charts/PDF/U0080.pdf) characters.
   * This is a category of 65 non-printable characters such as NUL, BEL, Backspace, DEL,
      tab, newline, carriage return, and form feed.
 
-## 9. License
+## 10. License
 
 Copyright ©2023 Amazon.com Inc. or Affiliates (“Amazon”).
 
 This Agreement sets forth the terms under which Amazon is making the Open Job Description
 Specification (“the Specification”) available to you.
 
-### 9.1. Copyrights
+### 10.1. Copyrights
 
 This Specification is licensed under [CC BY-ND 4.0](https://creativecommons.org/licenses/by-nd/4.0/deed.en).
 
-### 9.2. Patents
+### 10.2. Patents
 
 Subject to the terms and conditions of this Agreement, Amazon hereby grants to
 you a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable
@@ -1346,7 +1576,7 @@ Specification constitute direct or contributory patent infringement, then any
 patent licenses granted to You under this Agreement shall terminate as of the
 date such litigation is filed.
 
-### 9.3. Additional Information
+### 10.3. Additional Information
 
 For more info see the [LICENSE file].
 
