@@ -1,0 +1,53 @@
+# The wrap action runs per task — symbols re-inject cleanly each iteration.
+# Two tasks are generated from a task parameter range; the wrap action emits
+# a distinct sentinel per task so we can verify both ran.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrapRunsForEveryTask
+  steps:
+  - name: Step1
+    parameterSpace:
+      taskParameterDefinitions:
+      - name: N
+        type: INT
+        range: [1, 2]
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["ORIGINAL", "{{Task.Param.N}}"]
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapTaskRun:
+          command: bash
+          args:
+          - "-c"
+          - "echo WRAP_RAN={{WrappedAction.Command}}-{{WrappedAction.Args[1]}}"
+        onWrapEnvExit:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+
+runOn:
+- posix
+
+expected:
+  output:
+  - WRAP_RAN=echo-1
+  - WRAP_RAN=echo-2
+  forbidden:
+  - ORIGINAL

@@ -1,0 +1,63 @@
+# RFC 0008: openjd_env emitted by a wrapped action propagates to
+# WrappedAction.Environment for subsequent wrapped actions in the same
+# session — this is what makes wrap composition useful.
+#
+# Here the inner env's onEnter (running via onWrapEnvEnter) emits
+# `openjd_env: WRAPPED_VAR=set-from-wrap`. The subsequent task wrap must
+# see that variable in WrappedAction.Environment.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: OpenjdEnvPropagatesThroughWrap
+  jobEnvironments:
+  - name: InnerEnv
+    script:
+      actions:
+        onEnter:
+          command: bash
+          args:
+          - "-c"
+          - "echo 'openjd_env: WRAPPED_VAR=set-from-wrap'"
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["TASK"]
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        # Forward the inner env's onEnter verbatim so its openjd_env
+        # macro is captured (the scheduler scans the wrap script's stdout
+        # and recognizes the macro emitted by the wrapped process).
+        onWrapEnvEnter:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        # In the task wrap, dump WrappedAction.Environment to verify the
+        # variable propagated.
+        onWrapTaskRun:
+          command: bash
+          args:
+          - "-c"
+          - "for e in {{ repr_sh(WrappedAction.Environment) }}; do echo ENV=$e; done"
+        onWrapEnvExit:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+
+runOn:
+- posix
+
+expected:
+  output:
+  - ENV=WRAPPED_VAR=set-from-wrap

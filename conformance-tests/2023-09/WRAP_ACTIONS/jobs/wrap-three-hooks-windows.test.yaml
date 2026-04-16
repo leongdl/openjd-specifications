@@ -1,0 +1,60 @@
+# RFC 0008: Windows variant of the three-hooks test.
+# Validates that all three wrap hooks intercept correctly using cmd.
+runOn:
+- windows
+
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: ThreeHooksWindows
+  jobEnvironments:
+  - name: InnerEnv
+    script:
+      actions:
+        onEnter:
+          command: echo
+          args: ["INNER_ENTER_NORMAL"]
+        onExit:
+          command: echo
+          args: ["INNER_EXIT_NORMAL"]
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["ORIGINAL_TASK"]
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: cmd
+          args:
+          - "/c"
+          - "echo WRAP_ENTER_ENV={{WrappedEnv.Name}}"
+        onWrapTaskRun:
+          command: cmd
+          args:
+          - "/c"
+          - "echo WRAP_TASK_CMD={{WrappedAction.Command}}"
+        onWrapEnvExit:
+          command: cmd
+          args:
+          - "/c"
+          - "echo WRAP_EXIT_ENV={{WrappedEnv.Name}}"
+
+expected:
+  output:
+  - WRAP_ENTER_ENV=InnerEnv
+  - WRAP_TASK_CMD=echo
+  - WRAP_EXIT_ENV=InnerEnv
+  forbidden:
+  - INNER_ENTER_NORMAL
+  - INNER_EXIT_NORMAL
+  - ORIGINAL_TASK

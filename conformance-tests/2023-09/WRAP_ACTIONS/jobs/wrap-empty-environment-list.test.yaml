@@ -1,0 +1,47 @@
+# RFC 0008: WrappedAction.Environment is an empty list when no openjd_env
+# was emitted in the session. Verifies the empty case doesn't trip the
+# wrap script's iteration logic.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrappedActionEnvironmentEmpty
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["placeholder"]
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: python
+          args:
+          - "-c"
+          - "import subprocess,sys;sys.exit(subprocess.run([{{repr_py(WrappedAction.Command)}}]+{{repr_py(WrappedAction.Args)}}).returncode)"
+        onWrapTaskRun:
+          command: python
+          args:
+          - "-c"
+          # Print env count + a sentinel so we can confirm empty-list
+          # handling. With no openjd_env emissions, the loop body should
+          # not execute at all and only the sentinel appears.
+          - "for e in {{repr_py(WrappedAction.Environment)}}:\n print(f'ENV_PRESENT={e}')\nprint('ENV_DUMP_COMPLETE')"
+        onWrapEnvExit:
+          command: python
+          args:
+          - "-c"
+          - "import subprocess,sys;sys.exit(subprocess.run([{{repr_py(WrappedAction.Command)}}]+{{repr_py(WrappedAction.Args)}}).returncode)"
+
+expected:
+  output:
+  - ENV_DUMP_COMPLETE
+  forbidden:
+  - ENV_PRESENT=

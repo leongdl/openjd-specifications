@@ -1,0 +1,59 @@
+# RFC 0008 "Recommended test case" #2 — shell metacharacters.
+# Characters like $, `, |, ;, &&, (, ) must be treated as literals and not
+# interpreted by the wrap shell. repr_sh() prevents interpretation.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: ShellMetacharacters
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args:
+          # This string, if interpolated unsafely, would execute
+          # `cat /etc/passwd` and then `id` via command substitution. With
+          # repr_sh() it must be printed verbatim.
+          - "$(cat /etc/passwd); `id`; || echo pwned"
+          - "a|b"
+          - "c&&d"
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapTaskRun:
+          command: bash
+          args:
+          - "-c"
+          - "printf 'ARG=%s\\n' {{ repr_sh(WrappedAction.Args) }}"
+        onWrapEnvExit:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+
+runOn:
+- posix
+
+expected:
+  output:
+  - "ARG=$(cat /etc/passwd); `id`; || echo pwned"
+  - "ARG=a|b"
+  - "ARG=c&&d"
+  forbidden:
+  # If command substitution leaked, we'd likely see this line from
+  # /etc/passwd. Its absence is evidence that repr_sh() held.
+  - "root:x:0:0"
+  # `id` output would contain "uid=" — forbidden likewise.
+  - "uid="

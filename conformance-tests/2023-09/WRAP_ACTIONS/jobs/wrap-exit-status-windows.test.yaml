@@ -1,0 +1,44 @@
+# RFC 0008: Windows variant of exit-status propagation.
+# The wrapped action exits non-zero; the wrap script must propagate it.
+runOn:
+- windows
+
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: ExitStatusWindows
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: cmd
+          args: ["/c", "exit /b 42"]
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: cmd
+          args:
+          - "/c"
+          - "{{ repr_cmd(WrappedAction.Command) }} {{ repr_cmd(WrappedAction.Args) }}"
+        onWrapTaskRun:
+          command: cmd
+          args:
+          - "/c"
+          - "{{ repr_cmd(WrappedAction.Command) }} {{ repr_cmd(WrappedAction.Args) }}"
+        onWrapEnvExit:
+          command: cmd
+          args:
+          - "/c"
+          - "{{ repr_cmd(WrappedAction.Command) }} {{ repr_cmd(WrappedAction.Args) }}"
+
+expected:
+  taskFailure:
+    exitCode: 42

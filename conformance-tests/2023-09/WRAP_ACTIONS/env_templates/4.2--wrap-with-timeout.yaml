@@ -1,0 +1,22 @@
+# RFC 0008: each wrap hook supports the same fields as any other Action,
+# including timeout. The all-or-nothing rule requires all three hooks.
+specificationVersion: environment-2023-09
+extensions:
+- WRAP_ACTIONS
+- EXPR
+environment:
+  name: WrapWithTimeout
+  script:
+    actions:
+      onWrapEnvEnter:
+        command: echo
+        args: ["{{WrappedEnv.Name}}"]
+        timeout: 60
+      onWrapTaskRun:
+        command: echo
+        args: ["{{WrappedAction.Command}}"]
+        timeout: 300
+      onWrapEnvExit:
+        command: echo
+        args: ["{{WrappedEnv.Name}}"]
+        timeout: 60

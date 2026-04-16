@@ -1,0 +1,66 @@
+# RFC 0008: a wrapping environment is not required to be the outermost.
+# Here PlainEnterEnv (outer, not a wrapping env) runs normally, and
+# InnerWrap (inner, the wrapping env) wraps the task's onRun. Variables
+# emitted via openjd_env from PlainEnterEnv are visible to the wrap script
+# through the normal session environment.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: OuterWithoutWrapIgnored
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["ORIGINAL"]
+
+environments:
+# Outer environment: only onEnter, no wrap. This env sets an env var to
+# prove it ran — the inner wrap later echoes that value.
+- specificationVersion: environment-2023-09
+  environment:
+    name: PlainEnterEnv
+    script:
+      actions:
+        onEnter:
+          command: bash
+          args:
+          - "-c"
+          - "echo 'openjd_env: OUTER_VAR=outer_value'"
+
+# Inner environment: defines onWrapTaskRun.
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: InnerWrap
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapTaskRun:
+          command: bash
+          args:
+          - "-c"
+          - "echo WRAP_RAN; echo OUTER=$OUTER_VAR"
+        onWrapEnvExit:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+
+runOn:
+- posix
+
+expected:
+  output:
+  - WRAP_RAN
+  # The wrap action runs with the env vars from earlier environments,
+  # proving both envs were active.
+  - OUTER=outer_value
+  forbidden:
+  - ORIGINAL

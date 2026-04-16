@@ -1,0 +1,50 @@
+# Complementary to wrap-intercepts-simple-echo: the original onRun must NOT
+# execute when a wrap action is present. The original command here writes to a
+# file which the wrap action deliberately does not — so if the file contains
+# SHOULD_NOT_APPEAR anywhere in the output, the implementation is wrong.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: OriginalOnRunSuppressed
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: bash
+          args:
+          - "-c"
+          - "echo SHOULD_NOT_APPEAR; exit 7"
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapTaskRun:
+          command: bash
+          args:
+          - "-c"
+          - "echo WRAP_OK; exit 0"
+        onWrapEnvExit:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+
+runOn:
+- posix
+
+expected:
+  output:
+  - WRAP_OK
+  forbidden:
+  - SHOULD_NOT_APPEAR

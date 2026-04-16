@@ -1,0 +1,45 @@
+# RFC 0008: when the wrapped action specifies no timeout, WrappedAction.Timeout
+# evaluates to 0 (the spec sentinel — `<posinteger>` cannot represent absence).
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrappedActionTimeoutZeroWhenUnset
+  steps:
+  - name: Step1
+    script:
+      actions:
+        # Note: no timeout field on this onRun.
+        onRun:
+          command: echo
+          args: ["placeholder"]
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapTaskRun:
+          command: bash
+          args:
+          - "-c"
+          - "echo TIMEOUT={{WrappedAction.Timeout}}"
+        onWrapEnvExit:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+
+runOn:
+- posix
+
+expected:
+  output:
+  - TIMEOUT=0

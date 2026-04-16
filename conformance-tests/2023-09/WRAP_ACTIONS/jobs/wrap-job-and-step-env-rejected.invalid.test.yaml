@@ -1,0 +1,49 @@
+# RFC 0008 single-wrap-layer rule: even across job environments and step
+# environments, at most one wrapping environment may exist in the session
+# stack. A job env with wrap hooks combined with a step env with wrap
+# hooks must be rejected.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: JobAndStepWrapEnvsRejected
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  jobEnvironments:
+  - name: JobWrap
+    script:
+      actions:
+        onEnter:
+          command: echo
+          args: ["enter"]
+        onWrapEnvEnter:
+          command: echo
+          args: ["job-wrap-enter"]
+        onWrapTaskRun:
+          command: echo
+          args: ["JOB_WRAP"]
+        onWrapEnvExit:
+          command: echo
+          args: ["job-wrap-exit"]
+  steps:
+  - name: Step1
+    stepEnvironments:
+    - name: StepWrap
+      script:
+        actions:
+          onWrapEnvEnter:
+            command: echo
+            args: ["step-wrap-enter"]
+          onWrapTaskRun:
+            command: echo
+            args: ["STEP_WRAP"]
+          onWrapEnvExit:
+            command: echo
+            args: ["step-wrap-exit"]
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["TASK"]
+
+runOn:
+- posix

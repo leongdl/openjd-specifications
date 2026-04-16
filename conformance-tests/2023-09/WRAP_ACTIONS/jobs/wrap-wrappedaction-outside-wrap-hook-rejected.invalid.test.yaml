@@ -1,0 +1,36 @@
+# RFC 0008: WrappedAction.* must not be referenced outside a wrap hook.
+# Here the wrap env's onEnter references WrappedAction.Command, which has
+# no meaning outside the three wrap hooks. The validator must reject the
+# template with an "Undefined variable" error.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrappedActionOutOfScope
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  jobEnvironments:
+  - name: WrapEnv
+    script:
+      actions:
+        onEnter:
+          command: echo
+          args: ["{{WrappedAction.Command}}"]
+        onWrapEnvEnter:
+          command: echo
+          args: ["{{WrappedEnv.Name}}"]
+        onWrapTaskRun:
+          command: echo
+          args: ["{{WrappedAction.Command}}"]
+        onWrapEnvExit:
+          command: echo
+          args: ["{{WrappedEnv.Name}}"]
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["TASK"]
+
+runOn:
+- posix

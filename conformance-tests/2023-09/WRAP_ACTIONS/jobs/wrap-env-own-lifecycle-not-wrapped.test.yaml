@@ -1,0 +1,55 @@
+# RFC 0008: a wrapping environment's own onEnter and onExit are NEVER
+# wrapped by its own wrap hooks. The wrap-enter / wrap-exit must not
+# fire for the wrapping env itself, only for its inner environments.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrapEnvOwnLifecycleNotWrapped
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["TASK_RAN"]
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        # Distinct sentinels so we can verify these run NORMALLY (not via
+        # the wrap hooks below).
+        onEnter:
+          command: echo
+          args: ["WRAP_ENV_OWN_ENTER"]
+        onExit:
+          command: echo
+          args: ["WRAP_ENV_OWN_EXIT"]
+        # If these fire for the wrapping env's own onEnter/onExit, the
+        # forbidden sentinels below would appear.
+        onWrapEnvEnter:
+          command: echo
+          args: ["FORBIDDEN_WRAP_ENTER_FIRED"]
+        onWrapTaskRun:
+          command: echo
+          args: ["WRAP_TASK_FIRED"]
+        onWrapEnvExit:
+          command: echo
+          args: ["FORBIDDEN_WRAP_EXIT_FIRED"]
+
+runOn:
+- posix
+
+expected:
+  output:
+  - WRAP_ENV_OWN_ENTER
+  - WRAP_ENV_OWN_EXIT
+  - WRAP_TASK_FIRED
+  forbidden:
+  - FORBIDDEN_WRAP_ENTER_FIRED
+  - FORBIDDEN_WRAP_EXIT_FIRED
+  - TASK_RAN

@@ -1,0 +1,33 @@
+# RFC 0008: WRAP_ACTIONS has a hard prerequisite on EXPR. A template that
+# lists WRAP_ACTIONS without EXPR must be rejected.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrapWithoutExpr
+  extensions:
+  - WRAP_ACTIONS
+  jobEnvironments:
+  - name: WrapEnv
+    script:
+      actions:
+        onEnter:
+          command: echo
+          args: ["enter"]
+        onWrapEnvEnter:
+          command: echo
+          args: ["wrap-enter"]
+        onWrapTaskRun:
+          command: echo
+          args: ["wrap-task"]
+        onWrapEnvExit:
+          command: echo
+          args: ["wrap-exit"]
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["TASK"]
+
+runOn:
+- posix

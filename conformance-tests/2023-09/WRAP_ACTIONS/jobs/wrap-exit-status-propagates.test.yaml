@@ -1,0 +1,56 @@
+# RFC 0008 Failure semantics: wrap scripts MUST propagate the wrapped
+# process's exit status as their own. When the wrapped command exits
+# non-zero, the wrap action — and therefore the task — must fail.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrapExitStatusPropagates
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          # exit 7: a workload failure. The wrap script forwards via
+          # `exec`, so the wrap script's exit code is the wrapped process's.
+          command: bash
+          args:
+          - "-c"
+          - "echo TASK_BODY_RAN; exit 7"
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapTaskRun:
+          command: bash
+          args:
+          - "-c"
+          - "echo WRAP_BEFORE; exec {{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapEnvExit:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+
+runOn:
+- posix
+
+# This test expects the runner to surface the wrapped action's failure.
+# The .invalid suffix would be stronger, but we want to also assert the
+# specific output lines, which the `expected:` block enables for both
+# success and failure runs.
+expected:
+  output:
+  - WRAP_BEFORE
+  - TASK_BODY_RAN
+  forbidden:
+  - "Process exited with code: 0"
