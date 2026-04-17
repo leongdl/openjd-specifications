@@ -147,6 +147,8 @@ case-insensitive. For example, `INT`, `Int`, and `int` are all equivalent, as ar
 [RFC 0007](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0007-extend-parameter-types.md)
 for the design rationale.
 
+The `userInterface` property on parameter definitions provides hints to user interface implementations. Its fields are suggestions for how to present the parameter, not validation constraints. If a field does not apply to the chosen UI element, it should be ignored. Properties outside of `userInterface`, such as `allowedValues`, `minValue`, and `maxValue`, are constraints that must be enforced during validation.
+
 ### 2.1. `<JobStringParameterDefinition>`
 
 Defines a job parameter that allows input of a single string value to a Job Template.
@@ -167,7 +169,7 @@ allowedValues: [ <JobParameterStringValue>, ... ] # @optional
 minLength: <integer>,# @optional
 maxLength: <integer> # @optional
 userInterface: # @optional
-   control: enum("LINE_EDIT", "MULTILINE_EDIT", "DROPDOWN_LIST", "CHECK_BOX", "HIDDEN")
+   control: enum("LINE_EDIT", "MULTILINE_EDIT", "DROPDOWN_LIST", "CHECK_BOX", "HIDDEN") # @optional
    label: <UserInterfaceLabelStringValue> # @optional
    groupLabel: <UserInterfaceLabelStringValue> # @optional
 ```
@@ -183,8 +185,7 @@ Where:
    not in this list, if the list is defined. See: [&lt;JobParameterStringValue&gt;](#25-jobparameterstringvalue).
 5. *minLength* — The minimum allowable length of the parameter string value.
 6. *maxLength* — The maximum allowable length of the parameter string value.
-7. *userInterface* — User interface properties for this parameter. This metadata defines how a user interface element
-   should be constructed to allow a user to input a value for the parameter.
+7. *userInterface* — User interface hints for this parameter. See [§2](#2-jobparameterdefinition) for how implementations should treat these fields.
     1. *control* — The user interface control to use when editing this parameter.
        The default, if not provided, is "LINE_EDIT" when *allowedValues* is not provided, "DROPDOWN_LIST" when it is.
         1. "LINE_EDIT" — This is a freeform string line edit control. Cannot be used when *allowedValues* is provided.
@@ -239,7 +240,7 @@ maxLength: <integer> # @optional
 objectType: enum("FILE", "DIRECTORY") # @optional
 dataFlow: enum("NONE", "IN", "OUT", "INOUT") # @optional
 userInterface: # @optional
-   control: enum("CHOOSE_INPUT_FILE", "CHOOSE_OUTPUT_FILE", "CHOOSE_DIRECTORY", "DROPDOWN_LIST", "HIDDEN")
+   control: enum("CHOOSE_INPUT_FILE", "CHOOSE_OUTPUT_FILE", "CHOOSE_DIRECTORY", "DROPDOWN_LIST", "HIDDEN") # @optional
    label: <UserInterfaceLabelString> # @optional
    groupLabel: <UserInterfaceLabelStringValue> # @optional
    fileFilters: [ <JobPathParameterFileFilter>, ... ] # @optional
@@ -306,7 +307,7 @@ allowedValues: [ <integer> | <intstring>,... ] # @optional
 minValue: <integer> | <intstring> # @optional
 maxValue: <integer> | <intstring> # @optional
 userInterface:  # @optional
-   control: enum("SPIN_BOX", "DROPDOWN_LIST", "HIDDEN")
+   control: enum("SPIN_BOX", "DROPDOWN_LIST", "HIDDEN") # @optional
    label: <UserInterfaceLabelStringValue> # @optional
    groupLabel: <UserInterfaceLabelStringValue> # @optional
    singleStepDelta: <positiveint> # @optional
@@ -363,7 +364,7 @@ allowedValues: [ <float> | <floatstring>,... ] # @optional
 minValue: <float> | <floatstring> # @optional
 maxValue: <float> | <floatstring> # @optional
 userInterface: # @optional
-   control: enum(SPIN_BOX, DROPDOWN_LIST, HIDDEN)
+   control: enum(SPIN_BOX, DROPDOWN_LIST, HIDDEN) # @optional
    label: <UserInterfaceLabelStringValue> # @optional
    groupLabel: <UserInterfaceLabelStringValue> # @optional
    decimals: <integer> # @optional
@@ -464,7 +465,7 @@ type: "BOOL"
 description: <Description> # @optional
 default: <bool> # @optional
 userInterface: # @optional
-   control: enum("CHECK_BOX", "HIDDEN")
+   control: enum("CHECK_BOX", "HIDDEN") # @optional
    label: <UserInterfaceLabelStringValue> # @optional
    groupLabel: <UserInterfaceLabelStringValue> # @optional
 ```
@@ -510,7 +511,7 @@ default: <string> # @optional, must be valid <IntRangeExpr>
 minLength: <integer> # @optional
 maxLength: <integer> # @optional
 userInterface: # @optional
-   control: enum("LINE_EDIT", "HIDDEN")
+   control: enum("LINE_EDIT", "HIDDEN") # @optional
    label: <UserInterfaceLabelStringValue> # @optional
    groupLabel: <UserInterfaceLabelStringValue> # @optional
 ```
@@ -557,7 +558,7 @@ item: # @optional
   minLength: <integer> # @optional
   maxLength: <integer> # @optional
 userInterface: # @optional
-   control: enum("LINE_EDIT_LIST", "HIDDEN")
+   control: enum("LINE_EDIT_LIST", "HIDDEN") # @optional
    label: <UserInterfaceLabelStringValue> # @optional
    groupLabel: <UserInterfaceLabelStringValue> # @optional
 ```
@@ -604,7 +605,7 @@ item: # @optional
   maxLength: <integer> # @optional
 userInterface: # @optional
    control: enum("CHOOSE_INPUT_FILE_LIST", "CHOOSE_OUTPUT_FILE_LIST",
-                 "CHOOSE_DIRECTORY_LIST", "HIDDEN")
+                 "CHOOSE_DIRECTORY_LIST", "HIDDEN") # @optional
    label: <UserInterfaceLabelStringValue> # @optional
    groupLabel: <UserInterfaceLabelStringValue> # @optional
    fileFilters: [ <JobPathParameterFileFilter>, ... ] # @optional
@@ -660,7 +661,7 @@ item: # @optional
   minValue: <integer> # @optional
   maxValue: <integer> # @optional
 userInterface: # @optional
-   control: enum("SPIN_BOX_LIST", "HIDDEN")
+   control: enum("SPIN_BOX_LIST", "HIDDEN") # @optional
    label: <UserInterfaceLabelStringValue> # @optional
    groupLabel: <UserInterfaceLabelStringValue> # @optional
    singleStepDelta: <positiveint> # @optional
@@ -706,7 +707,7 @@ item: # @optional
   minValue: <float> # @optional
   maxValue: <float> # @optional
 userInterface: # @optional
-   control: enum("SPIN_BOX_LIST", "HIDDEN")
+   control: enum("SPIN_BOX_LIST", "HIDDEN") # @optional
    label: <UserInterfaceLabelStringValue> # @optional
    groupLabel: <UserInterfaceLabelStringValue> # @optional
    decimals: <integer> # @optional
@@ -750,7 +751,7 @@ default: [ <bool>, ... ] # @optional
 minLength: <integer> # @optional
 maxLength: <integer> # @optional
 userInterface: # @optional
-   control: enum("CHECK_BOX_LIST", "HIDDEN")
+   control: enum("CHECK_BOX_LIST", "HIDDEN") # @optional
    label: <UserInterfaceLabelStringValue> # @optional
    groupLabel: <UserInterfaceLabelStringValue> # @optional
 ```
@@ -801,7 +802,7 @@ item: # @optional
     minValue: <integer> # @optional
     maxValue: <integer> # @optional
 userInterface: # @optional
-   control: enum("HIDDEN")
+   control: enum("HIDDEN") # @optional
    label: <UserInterfaceLabelStringValue> # @optional
    groupLabel: <UserInterfaceLabelStringValue> # @optional
 ```
