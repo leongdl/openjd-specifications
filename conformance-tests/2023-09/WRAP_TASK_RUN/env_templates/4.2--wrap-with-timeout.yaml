@@ -1,0 +1,12 @@
+# The wrap action supports the same fields as any other Action, including timeout.
+specificationVersion: environment-2023-09
+extensions:
+- WRAP_TASK_RUN
+environment:
+  name: WrapWithTimeout
+  script:
+    actions:
+      onWrapTaskRun:
+        command: echo
+        args: ["{{Task.Command}}"]
+        timeout: 300

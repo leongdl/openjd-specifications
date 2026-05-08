@@ -1,0 +1,45 @@
+# RFC 0008 "Recommended test case" #6 — empty and whitespace-only args.
+# An empty string is a distinct argument and must not be dropped. Whitespace
+# arguments must be preserved verbatim.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: EmptyAndWhitespaceArgs
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args:
+          - "before"
+          - ""
+          - "after"
+          - "  "
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_TASK_RUN
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapTaskRun:
+          command: sh
+          args:
+          - "-c"
+          # Use a sentinel wrap so empty lines in the output are still
+          # visible in the log. `<argN>` delimits each argv entry.
+          - "for a in {{ repr_sh(Task.Args) }}; do echo \"<$a>\"; done"
+
+runOn:
+- posix
+
+expected:
+  output:
+  - "<before>"
+  - "<after>"
+  - "<  >"
+  # An empty argv entry renders as `<>` after the shell splits.
+  - "<>"

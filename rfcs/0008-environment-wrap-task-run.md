@@ -861,6 +861,260 @@ validated against each of the three wrap hooks:
 10. **Wrap hook precedence**: Verify the scheduler rejects sessions where more than
     one environment defines any wrap hook.
 
+### End-to-end conformance tests for `onWrapEnter`, `onWrapExit`, and `runOnHost`
+
+These tests verify the routing semantics of the new hooks and the `runOnHost` opt-out
+using only `echo`, `cat`, and simple file creation — no containers or external services
+required. Each test observes behavior through a "marker file" pattern: each action
+appends a tagged line to a file in `{{Session.WorkingDirectory}}`, and the final file
+contents demonstrate which actions ran via which hook.
+
+Implementations can run these against a trivial "wrapper" that simulates an isolated
+execution context by prepending a marker. In the examples below, the outer env's wrap
+hooks prepend `[WRAPPED]` to every forwarded action's output, so a line in the marker
+file starting with `[WRAPPED]` proves the action went through the wrap hook, and a
+line without it proves the action ran directly on the host.
+
+#### Test 1: `onWrapEnter` intercepts inner `onEnter`
+
+Outer env defines `onWrapEnter`. Inner step env's `onEnter` writes a marker. The
+expected marker file contents prove interception.
+
+```yaml
+# Outer env (queue env)
+environment:
+  name: Wrapper
+  script:
+    actions:
+      onEnter:
+        command: "bash"
+        args: ["-c", "echo 'outer-onEnter ran on host' >> '{{Session.WorkingDirectory}}/trace.log'"]
+      onWrapEnter:
+        command: "bash"
+        args:
+          - "-c"
+          - >-
+            echo "[WRAPPED] inner-onEnter via onWrapEnter for env={{Env.Wrapped.Name}}"
+            >> '{{Session.WorkingDirectory}}/trace.log'
+            && {{ repr_sh(Env.Wrapped.Command) }} {{ repr_sh(Env.Wrapped.Args) }}
+      onExit:
+        command: "bash"
+        args: ["-c", "echo 'outer-onExit ran on host' >> '{{Session.WorkingDirectory}}/trace.log'"]
+```
+
+```yaml
+# Inner step env
+stepEnvironments:
+  - name: InnerEnter
+    script:
+      actions:
+        onEnter:
+          command: "bash"
+          args: ["-c", "echo 'inner-onEnter body' >> '{{Session.WorkingDirectory}}/trace.log'"]
+```
+
+**Expected** `trace.log` contents after session teardown:
+
+```
+outer-onEnter ran on host
+[WRAPPED] inner-onEnter via onWrapEnter for env=InnerEnter
+inner-onEnter body
+outer-onExit ran on host
+```
+
+**Pass criteria**: The `[WRAPPED]` line appears before `inner-onEnter body`,
+`Env.Wrapped.Name` resolves to `InnerEnter`, and the outer env's own `onEnter` is *not*
+prefixed with `[WRAPPED]`.
+
+#### Test 2: `onWrapExit` intercepts inner `onExit`
+
+Same outer env but with `onWrapExit` added. Inner step env's `onExit` writes a marker.
+
+```yaml
+# Outer env — onWrapExit added
+onWrapExit:
+  command: "bash"
+  args:
+    - "-c"
+    - >-
+      echo "[WRAPPED] inner-onExit via onWrapExit for env={{Env.Wrapped.Name}}"
+      >> '{{Session.WorkingDirectory}}/trace.log'
+      && {{ repr_sh(Env.Wrapped.Command) }} {{ repr_sh(Env.Wrapped.Args) }}
+```
+
+```yaml
+# Inner step env adds onExit
+stepEnvironments:
+  - name: InnerExit
+    script:
+      actions:
+        onEnter:
+          command: "bash"
+          args: ["-c", "echo 'inner-onEnter body' >> '{{Session.WorkingDirectory}}/trace.log'"]
+        onExit:
+          command: "bash"
+          args: ["-c", "echo 'inner-onExit body' >> '{{Session.WorkingDirectory}}/trace.log'"]
+```
+
+**Expected** trailing lines of `trace.log`:
+
+```
+[WRAPPED] inner-onExit via onWrapExit for env=InnerExit
+inner-onExit body
+outer-onExit ran on host
+```
+
+**Pass criteria**: Inner `onExit` is prefixed with `[WRAPPED]` and the outer env's own
+`onExit` is not.
+
+#### Test 3: `runOnHost: true` bypasses `onWrapEnter`
+
+Outer env defines `onWrapEnter`. Two inner step envs run `onEnter`: one with
+`runOnHost: true`, one without. The marker file shows which was wrapped.
+
+```yaml
+stepEnvironments:
+  - name: HostEnter
+    script:
+      actions:
+        onEnter:
+          command: "bash"
+          args: ["-c", "echo 'HostEnter ran' >> '{{Session.WorkingDirectory}}/trace.log'"]
+          runOnHost: true         # must bypass onWrapEnter
+  - name: WrappedEnter
+    script:
+      actions:
+        onEnter:
+          command: "bash"
+          args: ["-c", "echo 'WrappedEnter ran' >> '{{Session.WorkingDirectory}}/trace.log'"]
+                                  # no runOnHost → goes through onWrapEnter
+```
+
+**Expected** relevant lines of `trace.log`:
+
+```
+HostEnter ran
+[WRAPPED] inner-onEnter via onWrapEnter for env=WrappedEnter
+WrappedEnter ran
+```
+
+**Pass criteria**: The line for `HostEnter` is *not* preceded by a `[WRAPPED]` marker,
+and the line for `WrappedEnter` *is*. This proves `runOnHost: true` skips the wrap hook.
+
+#### Test 4: `runOnHost: true` bypasses `onWrapExit` on failure paths
+
+Same shape as Test 3, but verifies that `onWrapExit` is also skipped. This is important
+because `onExit` must run even when the wrapped context is broken or torn down.
+
+```yaml
+stepEnvironments:
+  - name: CleanupOnHost
+    script:
+      actions:
+        onExit:
+          command: "bash"
+          args:
+            - "-c"
+            - >-
+              echo 'CleanupOnHost: $(date -u +%FT%TZ)'
+              >> '{{Session.WorkingDirectory}}/cleanup.log'
+          runOnHost: true
+```
+
+**Pass criteria**: `cleanup.log` exists and contains the `CleanupOnHost:` line even if
+the outer env's `onWrapExit` would have failed (e.g., simulated by pointing its `bash -c`
+at a nonexistent command). The host-side `onExit` must be independent of the wrap hook's
+health.
+
+#### Test 5: Visible ordering across all three hooks
+
+Combine Tests 1, 2, and 3 in a single session. Include one inner env with `runOnHost: true`
+and one without, and one task. Capture the full `trace.log` and verify the ordering below:
+
+```
+outer-onEnter ran on host
+HostEnter ran
+[WRAPPED] inner-onEnter via onWrapEnter for env=WrappedEnter
+WrappedEnter ran
+[WRAPPED] onRun via onWrapTaskRun
+task-onRun body
+[WRAPPED] inner-onExit via onWrapExit for env=WrappedEnter
+WrappedExit ran
+HostExit ran
+outer-onExit ran on host
+```
+
+**Pass criteria**:
+- Every line from a non-`runOnHost` inner action is preceded by a `[WRAPPED]` line.
+- Every line from a `runOnHost: true` inner action stands alone with no `[WRAPPED]`
+  prefix.
+- Enter/exit order is strictly nested: outer-enter → inner-enters → task → inner-exits
+  (reverse) → outer-exit.
+
+#### Test 6: `Env.Wrapped.*` namespace in `onWrapEnter`/`onWrapExit`
+
+Outer env's `onWrapEnter` captures each `Env.Wrapped.*` variable to a separate file so
+its contents can be asserted. No task needed.
+
+```yaml
+onWrapEnter:
+  command: "bash"
+  args:
+    - "-c"
+    - >-
+      cat > '{{Session.WorkingDirectory}}/wrapped-enter.log' <<EOF
+      Name={{Env.Wrapped.Name}}
+      Command={{Env.Wrapped.Command}}
+      Args={{ repr_sh(Env.Wrapped.Args) }}
+      Environment={{ repr_sh(Env.Wrapped.Environment) }}
+      Timeout={{Env.Wrapped.Timeout}}
+      EOF
+      {{ repr_sh(Env.Wrapped.Command) }} {{ repr_sh(Env.Wrapped.Args) }}
+```
+
+Given an inner env:
+
+```yaml
+- name: VarProbe
+  script:
+    actions:
+      onEnter:
+        command: "echo"
+        args: ["hello", "from", "inner"]
+        timeout: 42
+```
+
+**Expected** `wrapped-enter.log` contents:
+
+```
+Name=VarProbe
+Command=echo
+Args=hello from inner
+Environment=
+Timeout=42
+```
+
+**Pass criteria**: Each `Env.Wrapped.*` variable resolves to the inner action's
+corresponding field, not to the outer env or the wrap hook itself.
+
+#### Test 7: Referencing `Task.*` inside `onWrapEnter` is an error
+
+Authoring negative test. A template whose `onWrapEnter` references `Task.Command` must
+be rejected at template-validation time (or at session-setup time if the template
+validator defers expression resolution).
+
+```yaml
+onWrapEnter:
+  command: "bash"
+  args: ["-c", "echo '{{Task.Command}}' > /tmp/out"]   # Task.* not in scope here
+```
+
+**Pass criteria**: The implementation emits a clear error identifying the out-of-scope
+variable reference and the hook in which it appears. The session does not start.
+
+The symmetric test (referencing `Env.Wrapped.*` inside `onWrapTaskRun`) must also be
+rejected.
+
 ## Prior Art
 
 ### Workflow languages with container abstraction

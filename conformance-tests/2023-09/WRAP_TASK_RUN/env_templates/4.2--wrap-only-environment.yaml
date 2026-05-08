@@ -1,0 +1,11 @@
+# RFC 0008: onWrapTaskRun alone is sufficient — onEnter and onExit are optional.
+specificationVersion: environment-2023-09
+extensions:
+- WRAP_TASK_RUN
+environment:
+  name: WrapOnlyEnv
+  script:
+    actions:
+      onWrapTaskRun:
+        command: echo
+        args: ["{{Task.Command}}"]
