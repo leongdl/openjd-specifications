@@ -15,7 +15,7 @@ template:
 environments:
 - specificationVersion: environment-2023-09
   extensions:
-  - WRAP_TASK_RUN
+  - WRAP_ACTIONS
   environment:
     name: OuterWrap
     script:
@@ -25,7 +25,7 @@ environments:
           args: ["OUTER_WRAP"]
 - specificationVersion: environment-2023-09
   extensions:
-  - WRAP_TASK_RUN
+  - WRAP_ACTIONS
   environment:
     name: InnerWrap
     script:

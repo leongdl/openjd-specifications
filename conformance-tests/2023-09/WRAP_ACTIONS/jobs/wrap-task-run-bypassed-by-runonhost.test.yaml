@@ -1,0 +1,39 @@
+# RFC 0008: a step's onRun that sets `runOnHost: true` must run on the
+# host directly and bypass the active environment's onWrapTaskRun. This
+# is the opt-out path on the task side, mirroring the env-side bypass.
+template:
+  specificationVersion: jobtemplate-2023-09
+  # The runOnHost field on the step's onRun is gated on WRAP_ACTIONS,
+  # so the job template must declare the extension.
+  extensions:
+  - WRAP_ACTIONS
+  name: TaskRunOnHostBypass
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["HOST_TASK_RAN"]
+          runOnHost: true
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapTaskRun:
+          command: echo
+          args: ["WRAP_RAN"]
+
+runOn:
+- posix
+
+expected:
+  output:
+  - HOST_TASK_RAN
+  forbidden:
+  - WRAP_RAN

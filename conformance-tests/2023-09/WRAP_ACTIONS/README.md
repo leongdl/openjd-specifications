@@ -1,10 +1,10 @@
-# WRAP_TASK_RUN Conformance Tests
+# WRAP_ACTIONS Conformance Tests
 
-Conformance tests for the `WRAP_TASK_RUN` extension defined in [RFC 0008 — Environment Wrap Task Run](../../../rfcs/0008-environment-wrap-task-run.md).
+Conformance tests for the `WRAP_ACTIONS` extension defined in [RFC 0008 — Environment Wrap Task Run](../../../rfcs/0008-environment-wrap-task-run.md).
 
 ## What this extension does
 
-`WRAP_TASK_RUN` adds a third action to `<EnvironmentActions>`:
+`WRAP_ACTIONS` adds a third action to `<EnvironmentActions>`:
 
 ```yaml
 <EnvironmentActions> ::= the object:
@@ -42,7 +42,7 @@ exercising the full runtime path that a real container environment would use.
 ## Layout
 
 ```
-WRAP_TASK_RUN/
+WRAP_ACTIONS/
 ├── README.md                       (this file)
 ├── env_templates/                  # Env template validation tests
 │   ├── 4.2--minimal-wrap-env-template.yaml
@@ -109,7 +109,7 @@ Beyond the 8 security scenarios, this suite also validates:
   (`wrap-outer-env-without-wrap-ignored.test.yaml`).
 - **Repeatability**: symbols re-inject cleanly per task
   (`wrap-runs-for-every-task.test.yaml`).
-- **Extension gating**: the field requires the `WRAP_TASK_RUN` extension
+- **Extension gating**: the field requires the `WRAP_ACTIONS` extension
   (`wrap-without-extension-fails.invalid.test.yaml`).
 
 ## Running the tests
@@ -117,11 +117,11 @@ Beyond the 8 security scenarios, this suite also validates:
 From the repo root:
 
 ```bash
-# Run just the WRAP_TASK_RUN extension tests
-uv run conformance-tests/run_openjd_cli_tests.py 2023-09/WRAP_TASK_RUN
+# Run just the WRAP_ACTIONS extension tests
+uv run conformance-tests/run_openjd_cli_tests.py 2023-09/WRAP_ACTIONS
 
 # Run only the job execution tests
-uv run conformance-tests/run_openjd_cli_tests.py 2023-09/WRAP_TASK_RUN/jobs
+uv run conformance-tests/run_openjd_cli_tests.py 2023-09/WRAP_ACTIONS/jobs
 
 # Pattern-match a single scenario
 uv run conformance-tests/run_openjd_cli_tests.py '*wrap*unicode*'
@@ -130,14 +130,14 @@ uv run conformance-tests/run_openjd_cli_tests.py '*wrap*unicode*'
 ## Writing your own runner
 
 See the top-level [conformance README](../../README.md) for the standard runner
-contract. The key behaviour specific to `WRAP_TASK_RUN`:
+contract. The key behaviour specific to `WRAP_ACTIONS`:
 
-1. When the job template declares `extensions: [WRAP_TASK_RUN]`, the runner
+1. When the job template declares `extensions: [WRAP_ACTIONS]`, the runner
    must accept `onWrapTaskRun` under `environment.script.actions`.
 2. When an environment with `onWrapTaskRun` is entered via `--env`, every
    subsequent `openjd run ...` invocation must execute the wrap action in
    place of the step's `onRun`, with the listed template variables
    populated.
-3. When a template uses `onWrapTaskRun` *without* `WRAP_TASK_RUN` in the
+3. When a template uses `onWrapTaskRun` *without* `WRAP_ACTIONS` in the
    `extensions` list, the runner must reject the template at validation
    time (this is covered by the `.invalid.test.yaml` fixture).

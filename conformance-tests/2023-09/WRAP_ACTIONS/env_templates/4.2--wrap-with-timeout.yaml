@@ -1,7 +1,7 @@
 # The wrap action supports the same fields as any other Action, including timeout.
 specificationVersion: environment-2023-09
 extensions:
-- WRAP_TASK_RUN
+- WRAP_ACTIONS
 environment:
   name: WrapWithTimeout
   script:
