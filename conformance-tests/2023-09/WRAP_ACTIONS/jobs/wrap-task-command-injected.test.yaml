@@ -1,0 +1,39 @@
+# Task.Command must reach the wrap action as the exact command from the
+# step's onRun. The wrap script echoes `CMD=<Task.Command>` so a simple
+# substring check can verify the value.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: TaskCommandInjected
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: maya-batch
+          args: ["-render", "scene.ma"]
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapTaskRun:
+          command: sh
+          args:
+          - "-c"
+          - "echo CMD={{Task.Command}}"
+
+runOn:
+- posix
+
+expected:
+  output:
+  - CMD=maya-batch
+  forbidden:
+  # The real command must never actually run — it's not on PATH, which is
+  # also a useful indicator: if the wrap didn't intercept, the runtime
+  # would try to exec `maya-batch` and error with a command-not-found.
+  - "No such file or directory"

@@ -1,0 +1,9 @@
+# RFC 0008: at least one of onEnter, onWrapTaskRun, or onExit must be defined.
+# An environment whose `actions` block is empty is invalid.
+specificationVersion: environment-2023-09
+extensions:
+- WRAP_ACTIONS
+environment:
+  name: EmptyActions
+  script:
+    actions: {}

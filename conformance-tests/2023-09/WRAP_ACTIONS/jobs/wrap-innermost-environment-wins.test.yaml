@@ -1,0 +1,45 @@
+# RFC 0008 recommends a single-layer wrap: when multiple environments in
+# the stack define onWrapTaskRun, the innermost (last-entered) one wins.
+# This test stacks two wrap environments and verifies only the inner one runs.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: InnermostWins
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["ORIGINAL"]
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  environment:
+    name: OuterWrap
+    script:
+      actions:
+        onWrapTaskRun:
+          command: echo
+          args: ["OUTER_WRAP"]
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  environment:
+    name: InnerWrap
+    script:
+      actions:
+        onWrapTaskRun:
+          command: echo
+          args: ["INNER_WRAP"]
+
+runOn:
+- posix
+
+expected:
+  output:
+  - INNER_WRAP
+  forbidden:
+  - OUTER_WRAP
+  - ORIGINAL

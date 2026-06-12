@@ -1,0 +1,19 @@
+# An action that uses `runOnHost: true` without the WRAP_ACTIONS
+# extension declared on the template must be rejected at parse time.
+# `runOnHost` only has meaning under WRAP_ACTIONS — outside that context
+# there's no wrap layer to bypass, so the field is meaningless and the
+# spec rejects it to keep templates honest.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: RunOnHostWithoutExtension
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["NEVER"]
+          runOnHost: true
+
+runOn:
+- posix

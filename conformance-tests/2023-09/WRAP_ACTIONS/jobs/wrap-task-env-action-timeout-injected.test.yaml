@@ -1,0 +1,34 @@
+# Env.Action.Timeout surfaces the timeout of the original onRun action so
+# the wrap script can propagate it (e.g., `docker stop --timeout N`).
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: EnvActionTimeoutInjected
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["placeholder"]
+          timeout: 123
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapTaskRun:
+          command: sh
+          args:
+          - "-c"
+          - "echo TIMEOUT={{Env.Action.Timeout}}"
+
+runOn:
+- posix
+
+expected:
+  output:
+  - TIMEOUT=123

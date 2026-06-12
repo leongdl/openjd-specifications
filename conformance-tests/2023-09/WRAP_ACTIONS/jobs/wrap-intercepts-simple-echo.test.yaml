@@ -1,0 +1,34 @@
+# Minimal wrap test — confirms the runtime runs `onWrapTaskRun` in place of
+# the step's `onRun`. The wrap action prints a sentinel that the step
+# itself would never emit, so the sentinel's presence proves the wrap ran.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrapIntercepts
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["ORIGINAL_ONRUN"]
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapTaskRun:
+          command: echo
+          args: ["WRAP_SENTINEL"]
+
+runOn:
+- posix
+
+expected:
+  output:
+  - WRAP_SENTINEL
+  forbidden:
+  - ORIGINAL_ONRUN
