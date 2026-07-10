@@ -185,9 +185,17 @@ RFC 0002. Specifically:
 
 - Schedulers that do not implement `WRAP_ACTIONS` MUST reject templates that list
   it in `extensions:`, per RFC 0002's extension-handling rules.
-- Schedulers that do implement `WRAP_ACTIONS` MUST ignore the three wrap hooks on
-  templates that do not list `WRAP_ACTIONS` in `extensions:`, so that existing
-  templates continue to behave exactly as before.
+- The wrap hooks are gated by the `WRAP_ACTIONS` declaration of the environment
+  template that *defines* them. An environment template that uses `onWrapEnvEnter`,
+  `onWrapTaskRun`, or `onWrapEnvExit` MUST list `WRAP_ACTIONS` in its own
+  `extensions:`, and a scheduler MUST reject an environment template that uses the
+  hooks without declaring the extension.
+- Job templates and inner environment templates do NOT need to list `WRAP_ACTIONS`.
+  When a wrapping environment that declares the extension is active in a session, it
+  wraps the lifecycle actions of inner environments and the `onRun` of tasks even
+  though those inner templates and jobs know nothing about the extension. A classic
+  job with no extensions runs unchanged when no wrapping environment is present, and
+  has its tasks wrapped when one is.
 - No existing field changes meaning; `onEnter` and `onExit` continue to behave as
   they do today when no wrap hook is active.
 
@@ -283,6 +291,7 @@ helper scripts can be reused unchanged.
 | `WrappedAction.Args`              | `list[string]` | The `args` from the wrapped action. |
 | `WrappedAction.Environment`       | `list[string]` | Environment variables defined by `openjd_env` earlier in the session, as `["KEY=value", ...]`. See [Host environment variables and embedded file paths](#host-environment-variables-and-embedded-file-paths). |
 | `WrappedAction.Timeout`           | `int`          | The timeout in seconds specified on the wrapped action, or `0` if none. See [Timeout behavior](#timeout-behavior). |
+| `WrappedAction.Cancelation.Mode`  | `string`       | The cancelation method of the wrapped action (`TERMINATE` or `NOTIFY_THEN_TERMINATE`), or empty if the wrapped action defines no `<Cancelation>`. See [Cancelation behavior](#cancelation-behavior). |
 
 **Additionally available in `onWrapEnvEnter` and `onWrapEnvExit`:**
 
@@ -422,10 +431,13 @@ container) MUST remain available until every `onWrapEnvExit` returns.
 
 ### Cancelation behavior
 
-The wrap hook's own `<Cancelation>` governs cancelation of any wrapped
-action; the wrapped action's own `<Cancelation>` is not surfaced to the
-wrap script and is not honored (a candidate future extension; see
-[Future Work](#future-work)).
+The wrap hook's own `<Cancelation>` governs how the session runtime cancels
+the wrap script. The wrapped action's own cancelation method is surfaced to
+the wrap script via the `WrappedAction.Cancelation.Mode` template variable,
+so the wrap script MAY honor the inner action's cancelation semantics when it
+propagates the termination signal (for example, allowing a graceful
+notification period before terminating when the wrapped action requested
+`NOTIFY_THEN_TERMINATE`).
 
 When the wrap script receives a termination signal (SIGTERM on POSIX,
 platform-equivalent on Windows), it MUST cause the wrapped process to
@@ -560,7 +572,10 @@ straightforward to iterate over in a list comprehension:
 ```
 
 A dictionary type would require additional syntax for iteration and would not map
-directly to CLI-flag conventions.
+directly to CLI-flag conventions. When a wrap script needs the key and value
+separately, the EXPR `split` function (RFC 0006) recovers them:
+`e.split('=', 1)` returns `["KEY", "value"]`, splitting on the first `=` only so
+values containing `=` are preserved.
 
 ### Command escaping via `repr_sh` rather than raw interpolation
 
@@ -636,31 +651,7 @@ than letting the OS return `E2BIG` from the underlying syscall. The error
 should make clear which action's expansion exceeded the limit so the
 template author can locate and fix the source.
 
-## Prior Art
-
-### Workflow DSLs with container abstraction
-
-Nextflow, CWL, Snakemake, and WDL each provide a way to run a rule or process
-inside a container without baking the container invocation into the workflow
-code. They differ in *where* the runtime choice lives:
-
-- **Docker** itself: `docker run --rm <image> <cmd>` is the underlying
-  primitive that all of the workflow DSLs ultimately invoke; using it
-  directly inside a wrap script is the form most wrap environments take.
-- **Nextflow** uses a global `nextflow.config` toggle.
-- **CWL** declares `DockerRequirement` as a hint; runners translate at execution.
-- **Snakemake** declares `container:` per rule and converts at runtime.
-- **WDL** declares `docker:` per task; engines may substitute.
-
 ## Rejected Ideas
-
-### Extending `<Action>` with a `wrapper` field
-
-We rejected adding a `wrapper` field to `<Action>` that specifies a command
-to prepend. This is simpler than wrap hooks but less flexible: it gives no
-access to the task's environment variables, no way to wrap inner
-environments' `onEnter`/`onExit`, and no way to transform the command and
-args (only prepend to them).
 
 ### Container-specific session action or runtime fields
 
@@ -724,12 +715,6 @@ composition order, per-layer scoping of `WrappedAction.*`/`WrappedEnv.*`/
 between layers, and how the all-or-nothing rule relaxes for pass-through
 intermediate layers. Nothing in the schema or namespace adopted here
 precludes the layered model.
-
-### Wrap-aware cancelation
-
-Surfacing the wrapped action's `<Cancelation>` to the wrap script as a template
-variable would allow wrap scripts to honor the inner action's cancelation
-semantics. Deferred until a concrete case arises.
 
 ### Distinguishing wrapper failures from workload failures
 
