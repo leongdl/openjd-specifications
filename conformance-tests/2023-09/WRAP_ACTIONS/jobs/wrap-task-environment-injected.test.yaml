@@ -1,0 +1,56 @@
+# WrappedAction.Environment is a list[string] of KEY=value entries collected from
+# `openjd_env:` lines emitted by active environments. The wrap script can
+# feed this list directly to `docker exec -e` style flags. This test checks
+# the list contents without needing Docker.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: TaskEnvironmentInjected
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["placeholder"]
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        # Set two env vars via openjd_env during onEnter. These should land
+        # in WrappedAction.Environment as KEY=value strings.
+        onEnter:
+          command: bash
+          args:
+          - "-c"
+          - "echo 'openjd_env: FOO=foo_value'; echo 'openjd_env: BAR=bar_value'"
+        onWrapEnvEnter:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapTaskRun:
+          command: bash
+          args:
+          - "-c"
+          # Iterate over WrappedAction.Environment, emitting one entry per line so we
+          # can verify both are present.
+          - "for e in {{ repr_sh(WrappedAction.Environment) }}; do echo ENV=$e; done"
+        onWrapEnvExit:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+
+runOn:
+- posix
+
+expected:
+  output:
+  - ENV=FOO=foo_value
+  - ENV=BAR=bar_value

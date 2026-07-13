@@ -50,7 +50,8 @@ Where:
       * Extensions available for specification version 2023-09: [TASK_CHUNKING](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0001-task-chunking.md),
          [REDACTED_ENV_VARS](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0003-redacted-env-vars.md),
          [FEATURE_BUNDLE_1](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0004-enhanced-limits-and-capabilities.md),
-         [EXPR](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0005-expression-language.md)
+         [EXPR](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0005-expression-language.md),
+         [WRAP_ACTIONS](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0008-environment-wrap-actions.md)
 4. *name* — The name to give to a Job that is created from the template. See: [&lt;JobName&gt;](#111-jobname).
 5. *description* — A description to apply to all Jobs that are created from the template. It has no functional purpose,
    but may appear in UI elements. See: [&lt;Description&gt;](#72-description).
@@ -1502,6 +1503,16 @@ The format string scopes available to format strings within an Environment are:
 3. `Env.*` — Scope of the environment entity itself. Values such as the embedded files defined within the Environment
    entity.
 4. Names bound by `let` in the enclosing `<EnvironmentScript>`. Available with the `EXPR` extension.
+5. `WrappedAction.*` — Available within `onWrapEnvEnter`, `onWrapTaskRun`, and `onWrapEnvExit` only. Carries
+   the wrapped `<Action>`'s fields. Available with the `WRAP_ACTIONS` extension. See [RFC 0008](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0008-environment-wrap-actions.md).
+6. `WrappedEnv.Name` — Available within `onWrapEnvEnter` and `onWrapEnvExit` only. The name of the inner
+   environment whose action is being wrapped. Available with the `WRAP_ACTIONS` extension.
+7. `WrappedStep.Name` — Available within `onWrapTaskRun` only. The name of the step whose task is being
+   wrapped. Available with the `WRAP_ACTIONS` extension.
+
+Templates must not reference `WrappedAction.*` outside the three wrap hooks, `WrappedEnv.*` outside
+`onWrapEnvEnter` and `onWrapEnvExit`, or `WrappedStep.*` outside `onWrapTaskRun`. Schedulers must reject
+templates that violate this scope rule.
 
 Implementations of this specfication must watch STDOUT when running the `onEnter` action for any line matching:
 
@@ -1550,16 +1561,45 @@ An `<EnvironmentActions>` is the object:
 
 ```yaml
 onEnter: <Action>
+onWrapEnvEnter: <Action>    # @optional @extension WRAP_ACTIONS
+onWrapTaskRun: <Action>     # @optional @extension WRAP_ACTIONS
+onWrapEnvExit: <Action>     # @optional @extension WRAP_ACTIONS
 onExit: <Action> # optional
 ```
 
 1. *onEnter* — The action run when the environment is being entered on a host.
-2. *onExit* — The action run when the environment is being exited on a host.
+2. *onWrapEnvEnter* — When provided, runs instead of the `onEnter` action of every *inner* environment that
+   enters the session while this environment is active. Available only when using the `WRAP_ACTIONS`
+   extension. See [RFC 0008](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0008-environment-wrap-actions.md).
+3. *onWrapTaskRun* — When provided, runs instead of the task's `onRun` action for every task that runs
+   while this environment is active. Available only when using the `WRAP_ACTIONS` extension. See
+   [RFC 0008](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0008-environment-wrap-actions.md).
+4. *onWrapEnvExit* — When provided, runs instead of the `onExit` action of every *inner* environment that
+   exits while this environment is active. Available only when using the `WRAP_ACTIONS` extension. See
+   [RFC 0008](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0008-environment-wrap-actions.md).
+
+Each wrap hook receives the wrapped `<Action>`'s fields via the `WrappedAction.*` template variables.
+An environment that defines any wrap hook must define all three. See
+[RFC 0008](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0008-environment-wrap-actions.md).
+5. *onExit* — The action run when the environment is being exited on a host.
 
    > **NOTE:** When *onExit* action does not define a *timeout* the action will default to 300
    seconds, or five minutes. Job schedulers may provide the ability to cancel jobs/steps/tasks. A
    reasonable default expectation should be that OpenJobDescription sessions are able to end and
    cleanup within a bound amount of time.
+
+> **`WRAP_ACTIONS` extension constraints.**
+>
+> 1. *All-or-nothing rule.* An environment that defines any of `onWrapEnvEnter`, `onWrapTaskRun`, or
+>    `onWrapEnvExit` must define all three. Schedulers must reject templates that define only a subset of
+>    the wrap hooks before the session begins.
+> 2. *Single-layer rule.* A session must contain at most one environment that defines wrap hooks.
+>    Schedulers must reject sessions whose stack contains two or more such environments before
+>    entering any environment.
+> 3. *EXPR prerequisite.* A template that lists `WRAP_ACTIONS` in `extensions:` must also list `EXPR`.
+>    Schedulers must reject templates that list `WRAP_ACTIONS` without also listing `EXPR`.
+> 4. The wrapping environment's own `onEnter` and `onExit` are never wrapped; they always run
+>    normally.
 
 ### 4.4. `<EnvironmentVariables>`
 
@@ -1618,11 +1658,20 @@ positive integer value in base-10, and:
    | --- | --- | --- |
    | `<StepActions>` | `onRun` | *no timeout* |
    | `<EnvironmentActions>` | `onEnter` | *no timeout* |
+   | `<EnvironmentActions>` | `onWrapEnvEnter` <sup>2</sup> | *no timeout* |
+   | `<EnvironmentActions>` | `onWrapTaskRun` <sup>2</sup> | *no timeout* |
+   | `<EnvironmentActions>` | `onWrapEnvExit` <sup>2</sup> | 300 seconds (five minutes) <sup>1</sup> |
    | `<EnvironmentActions>` | `onExit` | 300 seconds (five minutes) <sup>1</sup> |
 
    <sup>1</sup> Environment exit actions are treated specially. Job schedulers may provide the
    ability to cancel jobs, steps, and tasks. A reasonable default expectation should be that
    OpenJobDescription sessions are able to end and cleanup within a bound duration of time.
+
+   <sup>2</sup> Available with the `WRAP_ACTIONS` extension. The wrap hook's `timeout` field bounds
+   the wrap script on the host (infrastructure-side); the `WrappedAction.Timeout` template variable
+   carries the wrapped action's timeout (workload-side). When the wrapped action specified no
+   timeout, the variable evaluates to `0`.
+   See [RFC 0008](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0008-environment-wrap-actions.md).
 
 4. *cancelation* — If defined, provides details regarding how this action should be canceled. If not provided, then it is
    treated as though provided with `<CancelationMethodTerminate>`.
@@ -2067,12 +2116,17 @@ positive integer value in base-10, and:
    | --- | --- | --- |
    | `<StepActions>` | `onRun` | *no timeout* |
    | `<EnvironmentActions>` | `onEnter` | *no timeout* |
+   | `<EnvironmentActions>` | `onWrapEnvEnter` <sup>2</sup> | *no timeout* |
+   | `<EnvironmentActions>` | `onWrapTaskRun` <sup>2</sup> | *no timeout* |
+   | `<EnvironmentActions>` | `onWrapEnvExit` <sup>2</sup> | 300 seconds (five minutes) <sup>1</sup> |
    | `<EnvironmentActions>` | `onExit` | 300 seconds (five minutes) <sup>1</sup> |
 
    <sup>1</sup> Environment exit actions are treated specially. Job schedulers
    may provide the ability to cancel jobs, steps, and tasks. A reasonable
    default expectation should be that OpenJobDescription sessions are able to
    end and cleanup within a bound duration of time.
+
+   <sup>2</sup> Available with the `WRAP_ACTIONS` extension. See [RFC 0008](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0008-environment-wrap-actions.md).
 
 5. *cancelation* — If defined, provides details regarding how this action should
    be canceled. If not provided, then it is treated as though provided with `<CancelationMethodTerminate>`.

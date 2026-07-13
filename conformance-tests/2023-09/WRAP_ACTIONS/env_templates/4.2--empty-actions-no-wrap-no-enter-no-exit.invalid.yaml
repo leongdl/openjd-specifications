@@ -1,0 +1,10 @@
+# An environment whose `actions` block is empty is invalid: at least one of
+# onEnter, onWrapEnvEnter, onWrapTaskRun, onWrapEnvExit, or onExit must be defined.
+specificationVersion: environment-2023-09
+extensions:
+- WRAP_ACTIONS
+- EXPR
+environment:
+  name: EmptyActions
+  script:
+    actions: {}

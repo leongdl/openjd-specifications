@@ -1,0 +1,30 @@
+# RFC 0008 all-or-nothing rule: an environment that defines any wrap hook
+# must define all three. Defining only onWrapTaskRun must be rejected by
+# the runtime before the session begins.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: PartialWrapHooksRejected
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["TASK_RAN"]
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  environment:
+    name: PartialWrap
+    script:
+      actions:
+        # Only one of the three wrap hooks is defined. The all-or-nothing
+        # rule requires onWrapEnvEnter, onWrapTaskRun, and onWrapEnvExit together.
+        onWrapTaskRun:
+          command: echo
+          args: ["WRAP_RAN"]
+
+runOn:
+- posix

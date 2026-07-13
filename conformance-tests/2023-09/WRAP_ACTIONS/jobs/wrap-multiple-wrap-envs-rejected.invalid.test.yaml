@@ -1,0 +1,58 @@
+# RFC 0008: at most one environment in the session stack may define any
+# wrap hook. A job template that stacks two wrapping environments in
+# `jobEnvironments` must be rejected before any environment is entered.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: MultipleWrapEnvsRejected
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  jobEnvironments:
+  - name: OuterWrap
+    script:
+      actions:
+        onEnter:
+          command: echo
+          args: ["outer-enter"]
+        onWrapEnvEnter:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapTaskRun:
+          command: echo
+          args: ["OUTER_WRAP"]
+        onWrapEnvExit:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+  - name: InnerWrap
+    script:
+      actions:
+        onEnter:
+          command: echo
+          args: ["inner-enter"]
+        onWrapEnvEnter:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapTaskRun:
+          command: echo
+          args: ["INNER_WRAP"]
+        onWrapEnvExit:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["ORIGINAL"]
+
+runOn:
+- posix

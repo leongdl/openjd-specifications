@@ -1,0 +1,57 @@
+# WrappedAction.Args is a list[string]; with the EXPR extension, repr_sh(list) joins
+# the elements with spaces and shell-quotes each individually. This test
+# verifies that the list contents reach the wrap script intact.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: TaskArgsPreserved
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: mytool
+          args:
+          - "--scene"
+          - "scene01.ma"
+          - "--frame"
+          - "42"
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapTaskRun:
+          command: bash
+          args:
+          - "-c"
+          # repr_sh(list[string]) joins elements with spaces and shell-quotes
+          # each individually. Plain strings with no metacharacters render as
+          # bare tokens.
+          - "printf 'ARGS=%s\\n' {{ repr_sh(WrappedAction.Args) }}"
+        onWrapEnvExit:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+
+runOn:
+- posix
+
+expected:
+  output:
+  # Each element becomes one argv entry for `printf '%s\n'`, so the output is
+  # one line per arg. Order is preserved.
+  - "ARGS=--scene"
+  - "ARGS=scene01.ma"
+  - "ARGS=--frame"
+  - "ARGS=42"

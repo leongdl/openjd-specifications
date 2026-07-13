@@ -1,0 +1,58 @@
+# RFC 0008: an outer environment's onWrapEnvEnter must run instead of an
+# inner environment's onEnter, with `WrappedEnv.Name` resolving to the
+# inner environment's name. The wrap script writes a marker line that
+# the inner env's onEnter would never produce.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrapEnterIntercepts
+  jobEnvironments:
+  - name: InnerEnv
+    script:
+      actions:
+        onEnter:
+          command: echo
+          args: ["INNER_ON_ENTER_NORMAL"]
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["TASK_RAN"]
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args:
+          - "-c"
+          - "echo WRAP_ENTER_FOR={{WrappedEnv.Name}}"
+        # All-or-nothing rule: the other two hooks must be defined.
+        # They forward the wrapped action verbatim via repr_sh.
+        onWrapTaskRun:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapEnvExit:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+
+runOn:
+- posix
+
+expected:
+  output:
+  - WRAP_ENTER_FOR=InnerEnv
+  - TASK_RAN
+  forbidden:
+  - INNER_ON_ENTER_NORMAL

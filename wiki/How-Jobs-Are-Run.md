@@ -31,6 +31,16 @@ runs Chunks for that Step instead of individual Tasks. A Chunk is a set of Tasks
 values identical except for the chunked Task parameter. It takes values from an integer range expression
 like "1-3" or 1-3,5,7" depending on whether the chunks are constrained to be contiguous or not.
 
+If exactly one Environment in the session stack defines the wrap hooks (`onWrapEnvEnter`, `onWrapTaskRun`,
+`onWrapEnvExit`, part of the WRAP_ACTIONS extension), the lifecycle actions of inner Environments and tasks
+are intercepted: an inner Environment's `onEnter` is replaced by the wrapping Environment's
+`onWrapEnvEnter`, a task's `onRun` is replaced by the wrapping Environment's `onWrapTaskRun`, and an inner
+Environment's `onExit` is replaced by the wrapping Environment's `onWrapEnvExit`. The wrapping Environment's
+own `onEnter` and `onExit` are never wrapped; they always run normally. If more than one Environment
+in the session stack defines any wrap hook, the session is invalid and the scheduler must reject it
+before entering any Environment. If an Environment defines any wrap hook, it must define all three. See
+[RFC 0008](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0008-environment-wrap-actions.md).
+
 When the EXPR extension is used, format strings evaluated on the Worker Host support the full
 [expression language](2026-02-Expression-Language) including arithmetic, conditionals, function calls,
 path manipulation, and script embedding functions like `repr_sh()` for safe shell quoting.
@@ -110,6 +120,12 @@ messages to convey information about the **Action** to the render management sys
 * `openjd_unset_env: <var>` where `<var>` is the string name of an environment variable. This can only be emitted by the
   **Action** for entering an **Environment**. This unsets the given environment variable for all subsequent **Action**s
   in the **Session** until the **Environment** that emitted it is exited.
+
+When the WRAP_ACTIONS extension is in use, schedulers must scan the stdout of the wrap script (`onWrapEnvEnter`,
+`onWrapTaskRun`, or `onWrapEnvExit`) for these macros, not the stdout of the wrapped process. Wrap scripts must
+forward the wrapped process's stdout and stderr verbatim, which causes macros emitted by the wrapped process
+to be recognized identically to macros emitted by the wrap script itself. See
+[RFC 0008](https://github.com/OpenJobDescription/openjd-specifications/blob/mainline/rfcs/0008-environment-wrap-actions.md).
 
 ## Path Mapping
 

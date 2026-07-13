@@ -1,0 +1,23 @@
+specificationVersion: environment-2023-09
+extensions:
+- WRAP_ACTIONS
+- EXPR
+environment:
+  name: MinimalWrapEnv
+  script:
+    actions:
+      onEnter:
+        command: echo
+        args: ["entered"]
+      onWrapEnvEnter:
+        command: echo
+        args: ["wrap-enter", "{{WrappedEnv.Name}}"]
+      onWrapTaskRun:
+        command: echo
+        args: ["wrap-task", "{{WrappedAction.Command}}"]
+      onWrapEnvExit:
+        command: echo
+        args: ["wrap-exit", "{{WrappedEnv.Name}}"]
+      onExit:
+        command: echo
+        args: ["exited"]

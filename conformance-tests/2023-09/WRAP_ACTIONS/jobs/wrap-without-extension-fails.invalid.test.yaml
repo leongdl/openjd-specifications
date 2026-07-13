@@ -1,0 +1,32 @@
+# An environment template that uses wrap hooks without declaring the
+# WRAP_ACTIONS extension must be rejected by the runtime.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrapWithoutExtension
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["SHOULD_NOT_RUN"]
+
+environments:
+- specificationVersion: environment-2023-09
+  # NOTE: the WRAP_ACTIONS extension is deliberately NOT declared.
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: echo
+          args: ["wrap-enter"]
+        onWrapTaskRun:
+          command: echo
+          args: ["SHOULD_NOT_RUN"]
+        onWrapEnvExit:
+          command: echo
+          args: ["wrap-exit"]
+
+runOn:
+- posix

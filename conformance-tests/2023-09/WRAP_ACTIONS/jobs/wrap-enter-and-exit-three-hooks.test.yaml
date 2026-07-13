@@ -1,0 +1,61 @@
+# RFC 0008: a single wrap environment declares all three hooks
+# (onWrapEnvEnter, onWrapTaskRun, onWrapEnvExit). This test validates that
+# all three intercept correctly in one session, with the inner env's
+# onEnter/onExit replaced by the wrap scripts.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: ThreeHooks
+  jobEnvironments:
+  - name: InnerEnv
+    script:
+      actions:
+        onEnter:
+          command: echo
+          args: ["INNER_ENTER_NORMAL"]
+        onExit:
+          command: echo
+          args: ["INNER_EXIT_NORMAL"]
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["ORIGINAL_TASK"]
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: python
+          args:
+          - "-c"
+          - "print('WRAP_ENTER_NAME={{WrappedEnv.Name}}');print('WRAP_ENTER_CMD={{WrappedAction.Command}}')"
+        onWrapTaskRun:
+          command: python
+          args:
+          - "-c"
+          - "print('WRAP_TASK_CMD={{WrappedAction.Command}}');print('WRAP_TASK_STEP={{WrappedStep.Name}}')"
+        onWrapEnvExit:
+          command: python
+          args:
+          - "-c"
+          - "print('WRAP_EXIT_NAME={{WrappedEnv.Name}}')"
+
+expected:
+  output:
+  - WRAP_ENTER_NAME=InnerEnv
+  - WRAP_ENTER_CMD=echo
+  - WRAP_TASK_CMD=echo
+  - WRAP_TASK_STEP=Step1
+  - WRAP_EXIT_NAME=InnerEnv
+  forbidden:
+  - INNER_ENTER_NORMAL
+  - INNER_EXIT_NORMAL
+  - ORIGINAL_TASK

@@ -1,0 +1,60 @@
+# RFC 0008: an outer environment's onWrapEnvExit must run instead of an
+# inner environment's onExit, with `WrappedEnv.Name` resolving to the
+# inner environment's name. The wrap script writes a marker that the
+# inner env's onExit would never produce.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrapExitIntercepts
+  jobEnvironments:
+  - name: InnerEnv
+    script:
+      actions:
+        onEnter:
+          command: echo
+          args: ["inner-enter"]
+        onExit:
+          command: echo
+          args: ["INNER_ON_EXIT_NORMAL"]
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["TASK_RAN"]
+
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        # All-or-nothing rule: the other two hooks forward verbatim.
+        onWrapEnvEnter:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapTaskRun:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapEnvExit:
+          command: bash
+          args:
+          - "-c"
+          - "echo WRAP_EXIT_FOR={{WrappedEnv.Name}}"
+
+runOn:
+- posix
+
+expected:
+  output:
+  - WRAP_EXIT_FOR=InnerEnv
+  - TASK_RAN
+  forbidden:
+  - INNER_ON_EXIT_NORMAL
