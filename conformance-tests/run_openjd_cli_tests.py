@@ -21,6 +21,7 @@ import argparse
 import fnmatch
 import io
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -51,6 +52,28 @@ def run_check(template_path: Path) -> tuple[bool, str]:
         capture_output=True, text=True,
     )
     return result.returncode == 0, result.stderr or result.stdout
+
+
+# Matches the per-process exit-code line emitted by conforming CLIs. Both the
+# Python (`Process pid 1234 exited with code: 42 (unsigned) / 0x2a (hex)`) and
+# Rust (`Process exited with code: 42`) CLIs share the `exited with code: <N>`
+# substring, so a single regex extracts process exit codes from either.
+_EXIT_CODE_RE = re.compile(r"exited with code:\s*(-?\d+)")
+
+
+def extract_failure_exit_code(output: str) -> int | None:
+    """Return the exit code of the failing action in the run output, or None.
+
+    All failures are terminal for a session, so the first non-zero exit code
+    is the failing action's code. Later `exited with code:` lines belong to
+    teardown actions (onWrapEnvExit, onExit) that run after the failure and
+    may exit 0, so matching the last line would mis-attribute the failure.
+    """
+    for match in _EXIT_CODE_RE.findall(output):
+        code = int(match)
+        if code != 0:
+            return code
+    return None
 
 
 def should_skip_test(test: dict) -> bool:
@@ -110,6 +133,35 @@ def run_job(test_path: Path) -> tuple[bool, str] | None:
 
         # Check expected output
         expected = test.get("expected", {})
+
+        # taskFailure: assert the run surfaced a task failure, and (optionally)
+        # that a specific process exit code propagated. This is how exit-status
+        # propagation is verified for a non-.invalid. test that must still make
+        # assertions about its output.
+        task_failure = expected.get("taskFailure")
+        if task_failure is not None:
+            if result.returncode == 0:
+                return False, (
+                    "Expected task failure (non-zero run exit) but the run "
+                    f"succeeded (exit 0).\n--- Actual output ---\n{output}"
+                )
+            expected_code = task_failure.get("exitCode")
+            if expected_code is not None:
+                actual_code = extract_failure_exit_code(output)
+                if actual_code is None:
+                    return False, (
+                        "Expected task exitCode "
+                        f"{expected_code} but no non-zero 'exited with code' "
+                        f"line was found in the output.\n"
+                        f"--- Actual output ---\n{output}"
+                    )
+                if actual_code != expected_code:
+                    return False, (
+                        f"Expected task exitCode {expected_code} but the "
+                        f"failing action exited with {actual_code}.\n"
+                        f"--- Actual output ---\n{output}"
+                    )
+
         expected_output = expected.get("output", []) + expected.get(f"output_{OPERATING_SYSTEM}", [])
         forbidden = expected.get("forbidden", []) + expected.get(f"forbidden_{OPERATING_SYSTEM}", [])
         for line in expected_output:

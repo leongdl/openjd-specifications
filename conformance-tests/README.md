@@ -145,9 +145,20 @@ expected:
     - /wrong/path
   forbidden_windows:
     - D:\wrong\path
+  # Optional: assert the run ended in a task failure, and (optionally) that a
+  # specific process exit code propagated to the task.
+  taskFailure:
+    exitCode: 42
 ```
 
 Platform-specific assertions (`output_posix`, `output_windows`, `forbidden_posix`, `forbidden_windows`) are merged with the base `output` and `forbidden` lists at runtime based on the current platform. Use these when tests involve filesystem paths or other platform-dependent behavior.
+
+The `taskFailure` assertion is for non-`.invalid.` job tests that succeed at the CLI level (the `openjd run` invocation itself does not error) but must still verify that a task *failed* — for example, that a wrapped process' non-zero exit status propagated through a wrap script. When present:
+
+- The run MUST exit non-zero (the session reported a task failure). A run that succeeds fails the assertion.
+- If `exitCode` is given, the first non-zero `exited with code: <N>` line in the run output MUST report that code. All failures are terminal for a session, so the first non-zero code is the failing action's; later lines belong to teardown actions (`onWrapEnvExit`, `onExit`) that run after the failure and may legitimately exit `0`. The `exited with code:` substring is emitted by conforming CLIs (`Process exited with code: 42`, `Process pid 1234 exited with code: 42 (unsigned) / ...`), so the assertion is portable across implementations.
+
+Use `taskFailure` instead of the `.invalid.test.yaml` suffix when you also want to assert specific `output`/`forbidden` lines on a failing run, or when you need to pin the propagated exit code.
 
 The `runOn` field restricts a test to run only on the listed operating systems. If omitted, the test runs on all platforms. Use this when a test requires a platform-specific command (e.g., `cmd` or `powershell` on Windows, `bash` on POSIX).
 
