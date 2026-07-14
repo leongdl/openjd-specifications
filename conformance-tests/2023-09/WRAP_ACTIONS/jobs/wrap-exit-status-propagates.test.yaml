@@ -47,10 +47,12 @@ runOn:
 # This test expects the runner to surface the wrapped action's failure.
 # The .invalid suffix would be stronger, but we want to also assert the
 # specific output lines, which the `expected:` block enables for both
-# success and failure runs.
+# success and failure runs. `taskFailure.exitCode` asserts that the wrapped
+# process' exit status (7) propagated through the wrap script to the task,
+# which is the actual regression this test guards against.
 expected:
+  taskFailure:
+    exitCode: 7
   output:
   - WRAP_BEFORE
   - TASK_BODY_RAN
-  forbidden:
-  - "Process exited with code: 0"
