@@ -1,0 +1,53 @@
+# RFC 0008 "Stdout forwarding and macro propagation": runtimes MUST scan
+# the wrap script's stdout for OpenJD macros, and because wrap scripts
+# forward the wrapped process's stdout verbatim, "a macro emitted by a
+# wrapped process is recognized identically to one emitted by the wrap
+# script itself". The openjd_env case is already pinned
+# (wrap-openjd-env-from-wrapped-onenter-propagates); this fixture pins a
+# second macro, openjd_fail: the wrapped task's onRun emits a failure
+# message and exits 3, the wrap hook re-invokes it verbatim, and the
+# failure (message line + propagated exit status) must surface exactly as
+# in the unwrapped case.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrapOpenjdFailFromWrappedProcess
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: bash
+          args:
+          - "-c"
+          - "echo 'openjd_fail: wrapped process failure message'; exit 3"
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapTaskRun:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapEnvExit:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+runOn:
+- posix
+expected:
+  taskFailure:
+    exitCode: 3
+  output:
+  - "openjd_fail: wrapped process failure message"

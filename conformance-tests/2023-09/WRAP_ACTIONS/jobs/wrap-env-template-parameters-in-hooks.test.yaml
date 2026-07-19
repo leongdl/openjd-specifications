@@ -1,0 +1,60 @@
+# A wrap environment template parameterized through its own
+# parameterDefinitions — the natural way to write a reusable wrapper
+# (container image name, mount prefix, ...) and how RFC 0008's motivating
+# examples read. The environment's format-string scope includes Param.*
+# (Template Schemas §4), so {{Param.Prefix}} must resolve inside all
+# three wrap hooks from the environment template's own parameter
+# defaults. This exercises a path the other fixtures never touch: the
+# wrap-task hook resolves against a symbol table derived from the
+# wrapped STEP, which knows nothing about the wrap env's parameters —
+# the runtime must carry the environment's own parameter scope to its
+# hooks itself.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrapEnvTemplateParametersInHooks
+  jobEnvironments:
+  - name: InnerEnv
+    script:
+      actions:
+        onEnter:
+          command: bash
+          args: ["-c", "echo INNER ENTER BODY"]
+        onExit:
+          command: bash
+          args: ["-c", "echo INNER EXIT BODY"]
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["placeholder"]
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  parameterDefinitions:
+  - name: Prefix
+    type: STRING
+    default: FROM_ENV_PARAM
+  environment:
+    name: WrapParam
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args: ["-c", "echo PENTER {{Param.Prefix}}"]
+        onWrapTaskRun:
+          command: bash
+          args: ["-c", "echo PTASK {{Param.Prefix}}"]
+        onWrapEnvExit:
+          command: bash
+          args: ["-c", "echo PEXIT {{Param.Prefix}}"]
+runOn:
+- posix
+expected:
+  output:
+  - "PENTER FROM_ENV_PARAM"
+  - "PTASK FROM_ENV_PARAM"
+  - "PEXIT FROM_ENV_PARAM"

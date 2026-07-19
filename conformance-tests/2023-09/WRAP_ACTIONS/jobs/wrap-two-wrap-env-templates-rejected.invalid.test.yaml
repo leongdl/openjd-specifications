@@ -1,0 +1,58 @@
+# RFC 0008 / How-Jobs-Are-Run: "If more than one Environment in the
+# session stack defines any wrap hook, the session is invalid and the
+# scheduler must reject it before entering any Environment."
+#
+# The existing wrap-multiple-wrap-envs-rejected fixture stacks two wrap
+# environments inside ONE job template, which template validation can
+# catch. This fixture supplies the two wrap environments as SEPARATE
+# environment templates — no single template is invalid, so the rule can
+# only be enforced by the session/runner at enter time. A runner that
+# skips the session-level check silently runs only the innermost wrap
+# env's hooks, dropping the outer wrap layer's containment entirely.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: TwoWrapEnvTemplatesRejected
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: bash
+          args: ["-c", "echo TASK BODY RAN"]
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapA
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args: ["-c", "echo WRAP A ENTER"]
+        onWrapTaskRun:
+          command: bash
+          args: ["-c", "echo WRAP A TASK"]
+        onWrapEnvExit:
+          command: bash
+          args: ["-c", "echo WRAP A EXIT"]
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapB
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args: ["-c", "echo WRAP B ENTER"]
+        onWrapTaskRun:
+          command: bash
+          args: ["-c", "echo WRAP B TASK"]
+        onWrapEnvExit:
+          command: bash
+          args: ["-c", "echo WRAP B EXIT"]
+runOn:
+- posix

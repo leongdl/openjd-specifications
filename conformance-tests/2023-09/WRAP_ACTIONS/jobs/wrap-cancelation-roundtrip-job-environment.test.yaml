@@ -1,0 +1,57 @@
+# Round-trip cancelation + timeout forwarding with the wrap environment
+# defined in the JOB template's jobEnvironments — not an external
+# environment template. Wrap hooks in jobEnvironments/stepEnvironments
+# are spec-supported, and this placement routes the template through job
+# instantiation (create_job), where the WrappedAction.* symbols cannot
+# exist yet: implementations that eagerly resolve creation-scoped fields
+# (timeout, notifyPeriodInSeconds) at instantiation reject this template
+# with "Undefined variable" even though it is valid. Every other
+# round-trip fixture uses external environment templates, which never
+# pass through create_job — so only this fixture pins the
+# instantiation-time deferral.
+template:
+  specificationVersion: jobtemplate-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  - FEATURE_BUNDLE_1
+  name: WrapCancelationRoundtripJobEnvironment
+  jobEnvironments:
+  - name: WrapRT
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+        onWrapTaskRun:
+          command: bash
+          args:
+          - "-c"
+          - "echo \"RT MODE=[{{WrappedAction.Cancelation.Mode}}] NP=[{{WrappedAction.Cancelation.NotifyPeriodInSeconds}}] T=[{{WrappedAction.Timeout}}]\""
+          timeout: "{{WrappedAction.Timeout}}"
+          cancelation:
+            mode: "{{WrappedAction.Cancelation.Mode}}"
+            notifyPeriodInSeconds: "{{WrappedAction.Cancelation.NotifyPeriodInSeconds}}"
+        onWrapEnvExit:
+          command: bash
+          args:
+          - "-c"
+          - "{{ repr_sh(WrappedAction.Command) }} {{ repr_sh(WrappedAction.Args) }}"
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["placeholder"]
+          timeout: 300
+          cancelation:
+            mode: NOTIFY_THEN_TERMINATE
+            notifyPeriodInSeconds: 45
+runOn:
+- posix
+expected:
+  output:
+  - "RT MODE=[NOTIFY_THEN_TERMINATE] NP=[45] T=[300]"

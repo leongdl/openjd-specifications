@@ -1,0 +1,52 @@
+# Template Schemas 5.3: when a format-string cancelation mode resolves to
+# "TERMINATE" or "NOTIFY_THEN_TERMINATE", the object "MUST then validate
+# against that form's schema". TERMINATE admits no notifyPeriodInSeconds,
+# so a mode resolving to TERMINATE alongside a non-null period is a
+# run-time validation error and the runtime must fail the action before
+# its script executes. The mode here is forwarded from WrappedAction.* —
+# seeded per-action at host evaluation time, so which form the object
+# takes is genuinely unknowable statically or at job creation (the same
+# wrap env may wrap actions with different modes). At parse time this
+# shape is legal by design: a deferred mode accepts the union of both
+# forms' fields, and the shape check moves to resolution time — this
+# fixture pins that deferred check.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrapCancelationTerminateWithPeriodFails
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["placeholder"]
+          cancelation:
+            mode: TERMINATE
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  - FEATURE_BUNDLE_1
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args: ["-c", "echo WRAP ENTER"]
+        onWrapTaskRun:
+          command: bash
+          args: ["-c", "echo TERMINATE PLUS PERIOD TASK RAN"]
+          cancelation:
+            mode: "{{WrappedAction.Cancelation.Mode}}"
+            notifyPeriodInSeconds: 45
+        onWrapEnvExit:
+          command: bash
+          args: ["-c", "echo WRAP EXIT"]
+runOn:
+- posix
+expected:
+  taskFailure: {}
+  forbidden:
+  - "TERMINATE PLUS PERIOD TASK RAN"

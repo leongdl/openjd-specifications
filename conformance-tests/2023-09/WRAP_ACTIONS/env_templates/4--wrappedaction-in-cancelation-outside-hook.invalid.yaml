@@ -1,0 +1,32 @@
+# Template Schemas 4 (format string scopes, items 5-7): "Templates must
+# not reference WrappedAction.* outside the three wrap hooks ... Schedulers
+# must reject templates that violate this scope rule." The scope rule
+# covers EVERY format-string field of an action — the existing scope
+# fixture covers args; this one pins the cancelation fields, where the
+# reference is easy to write by copy-pasting the round-trip forwarding
+# pattern into the wrong action. The env's own onEnter is not a wrap hook,
+# so its cancelation.mode must not reference WrappedAction.* even though
+# the same template legitimately uses the namespace inside its hooks.
+specificationVersion: environment-2023-09
+extensions:
+- WRAP_ACTIONS
+- EXPR
+- FEATURE_BUNDLE_1
+environment:
+  name: WrapEnv
+  script:
+    actions:
+      onEnter:
+        command: bash
+        args: ["-c", "echo own enter"]
+        cancelation:
+          mode: "{{WrappedAction.Cancelation.Mode}}"
+      onWrapEnvEnter:
+        command: bash
+        args: ["-c", "echo {{WrappedAction.Command}}"]
+      onWrapTaskRun:
+        command: bash
+        args: ["-c", "echo {{WrappedAction.Command}}"]
+      onWrapEnvExit:
+        command: bash
+        args: ["-c", "echo {{WrappedAction.Command}}"]

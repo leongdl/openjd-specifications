@@ -1,0 +1,52 @@
+# Template Schemas 5.3: when a format-string cancelation mode resolves,
+# "Any other resolved value is an error; the runtime MUST fail the action."
+# A constant expression could be folded and rejected during validation, so
+# this fixture builds the invalid value from WrappedAction.* — seeded
+# per-action at host evaluation time, unknowable statically or at job
+# creation: the wrapped action's mode (NOTIFY_THEN_TERMINATE) with the
+# literal suffix "_GARBAGE" resolves to "NOTIFY_THEN_TERMINATE_GARBAGE",
+# which is neither of the two method names nor null. The runtime must
+# fail the wrapped task when it prepares to run the action, and the
+# action's own script must never execute: a runtime that only inspects
+# the cancelation lazily (at cancel time) would run this action to
+# success and silently ignore the author's (typo'd) forwarding.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrapCancelationModeResolvesInvalidFails
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["placeholder"]
+          cancelation:
+            mode: NOTIFY_THEN_TERMINATE
+            notifyPeriodInSeconds: 45
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  - FEATURE_BUNDLE_1
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args: ["-c", "echo WRAP ENTER"]
+        onWrapTaskRun:
+          command: bash
+          args: ["-c", "echo GARBAGE MODE TASK RAN"]
+          cancelation:
+            mode: "{{WrappedAction.Cancelation.Mode}}_GARBAGE"
+        onWrapEnvExit:
+          command: bash
+          args: ["-c", "echo WRAP EXIT"]
+runOn:
+- posix
+expected:
+  taskFailure: {}
+  forbidden:
+  - "GARBAGE MODE TASK RAN"
