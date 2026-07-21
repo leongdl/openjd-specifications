@@ -283,6 +283,17 @@ A wrapping environment's wrap hooks intercept only the actions of inner
 environments and tasks. The wrapping environment's own `onEnter` and `onExit`
 are never wrapped.
 
+**Nothing-to-replace rule.** A wrap hook runs only in place of an action the
+inner entity actually defines. When an inner environment defines no `onExit`
+— or defines no `script` at all (a `variables:`-only environment) — there is
+nothing to replace, and the runtime MUST NOT run the corresponding wrap hook
+for that environment. A hook is a *replacement*, not a lifecycle
+notification: running `onWrapEnvExit` against a nonexistent `onExit` would
+execute wrapper teardown logic (for example, a container exec) for an action
+that was never going to run, with `WrappedAction.Command`/`Args` having no
+meaningful values. Every `<StepScript>` defines `onRun`, so `onWrapTaskRun`
+runs for every task.
+
 ### Template variables
 
 The following variables are read-only context supplied by the runtime to wrap
@@ -370,7 +381,10 @@ script does not propagate it behaves as if the field were absent.
 + - An inner Environment's onExit is replaced by the wrapping Environment's onWrapEnvExit.
 +
 + The wrapping Environment's own onEnter and onExit are never wrapped; they always run
-+ normally. If more than one Environment in the session stack defines any wrap hook,
++ normally. A wrap hook runs only in place of an action the inner Environment defines:
++ if an inner Environment defines no onExit (or defines no script at all), there is
++ nothing to replace and the corresponding wrap hook does not run for it. If more than
++ one Environment in the session stack defines any wrap hook,
 + the session is invalid and the scheduler must reject it before entering any
 + Environment. If an environment defines any wrap hook, it must define all three.
 ```
