@@ -1,0 +1,51 @@
+# Template Schemas 5.3.2: notifyPeriodInSeconds has a maximum value of
+# 600. A literal 700 is rejected at parse time, and a constant expression
+# like "{{ 700 }}" may equally be folded and rejected during validation —
+# so this fixture derives the out-of-range value from WrappedAction.*,
+# which is seeded per-action at host evaluation time and cannot be known
+# statically or at job creation: the wrapped action's forwarded period
+# (45) plus 655 resolves to 700 only when the hook is about to run. The
+# runtime must enforce the bound at resolution and fail the action;
+# otherwise the 600-second cap is bypassable by any run-time-derived
+# expression.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrapCancelationPeriodOverCapFails
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: echo
+          args: ["placeholder"]
+          cancelation:
+            mode: NOTIFY_THEN_TERMINATE
+            notifyPeriodInSeconds: 45
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  - FEATURE_BUNDLE_1
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onWrapEnvEnter:
+          command: bash
+          args: ["-c", "echo WRAP ENTER"]
+        onWrapTaskRun:
+          command: bash
+          args: ["-c", "echo PERIOD OVER CAP TASK RAN"]
+          cancelation:
+            mode: NOTIFY_THEN_TERMINATE
+            notifyPeriodInSeconds: "{{ WrappedAction.Cancelation.NotifyPeriodInSeconds + 655 }}"
+        onWrapEnvExit:
+          command: bash
+          args: ["-c", "echo WRAP EXIT"]
+runOn:
+- posix
+expected:
+  taskFailure: {}
+  forbidden:
+  - "PERIOD OVER CAP TASK RAN"

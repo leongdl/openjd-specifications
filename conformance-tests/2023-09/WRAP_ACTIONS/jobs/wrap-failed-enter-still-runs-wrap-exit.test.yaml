@@ -1,0 +1,72 @@
+# RFC 0008 "Lifecycle and cleanup guarantees", scenario row 1:
+# "onWrapEnvEnter fails for inner env B → onWrapEnvExit for B; wrapping
+# environment's onExit." A failed onWrapEnvEnter is an inner onEnter
+# failure (failure semantics), and the session's cleanup guarantee means
+# the inner environment must still be exited THROUGH the wrap layer
+# (onWrapEnvExit) and the wrapping environment's own onExit must run on
+# top — resources allocated by the wrapping environment's onEnter (a
+# container) must remain available until every onWrapEnvExit returns,
+# then be released. A runner that aborts on the enter failure without
+# running the exits leaks whatever the wrap env's onEnter started.
+#
+# The failing hook exits 7 so the taskFailure assertion can verify the
+# FIRST non-zero exit is the failed enter; the cleanup actions that run
+# after it exit 0.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: WrapFailedEnterStillRunsWrapExit
+  jobEnvironments:
+  - name: InnerEnv
+    script:
+      actions:
+        onEnter:
+          command: bash
+          args: ["-c", "echo INNER ENTER BODY"]
+        onExit:
+          command: bash
+          args: ["-c", "echo INNER EXIT BODY"]
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: bash
+          args: ["-c", "echo TASK BODY RAN"]
+environments:
+- specificationVersion: environment-2023-09
+  extensions:
+  - WRAP_ACTIONS
+  - EXPR
+  environment:
+    name: WrapEnv
+    script:
+      actions:
+        onEnter:
+          command: bash
+          args: ["-c", "echo WRAPENV OWN ENTER RAN"]
+        onWrapEnvEnter:
+          command: bash
+          args: ["-c", "echo WRAP ENTER FAILING; exit 7"]
+        onWrapTaskRun:
+          command: bash
+          args: ["-c", "echo WRAP TASK RAN"]
+        onWrapEnvExit:
+          command: bash
+          args: ["-c", "echo WRAP EXIT RAN for {{WrappedEnv.Name}}"]
+        onExit:
+          command: bash
+          args: ["-c", "echo WRAPENV OWN EXIT RAN"]
+runOn:
+- posix
+expected:
+  taskFailure:
+    exitCode: 7
+  output:
+  - "WRAPENV OWN ENTER RAN"
+  - "WRAP ENTER FAILING"
+  - "WRAP EXIT RAN for InnerEnv"
+  - "WRAPENV OWN EXIT RAN"
+  forbidden:
+  - "TASK BODY RAN"
+  - "INNER ENTER BODY"
+  - "INNER EXIT BODY"

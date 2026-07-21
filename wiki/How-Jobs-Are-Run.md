@@ -38,7 +38,10 @@ the lifecycle actions of inner Environments and tasks
 are intercepted: an inner Environment's `onEnter` is replaced by the wrapping Environment's
 `onWrapEnvEnter`, a task's `onRun` is replaced by the wrapping Environment's `onWrapTaskRun`, and an inner
 Environment's `onExit` is replaced by the wrapping Environment's `onWrapEnvExit`. The wrapping Environment's
-own `onEnter` and `onExit` are never wrapped; they always run normally. If more than one Environment
+own `onEnter` and `onExit` are never wrapped; they always run normally. A wrap hook runs only in place
+of an action the inner Environment defines: if an inner Environment defines no `onExit` (or defines no
+script at all), there is nothing to replace and the corresponding wrap hook does not run for it. If more
+than one Environment
 in the session stack defines any wrap hook, the session is invalid and the scheduler must reject it
 before entering any Environment. If an Environment defines any wrap hook, it must define all three.
 

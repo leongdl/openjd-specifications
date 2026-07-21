@@ -1601,6 +1601,11 @@ onExit: <Action> # optional
 >    Schedulers must reject templates that list `WRAP_ACTIONS` without also listing `EXPR`.
 > 4. The wrapping environment's own `onEnter` and `onExit` are never wrapped; they always run
 >    normally.
+> 5. *Nothing-to-replace rule.* A wrap hook runs only in place of an action the inner entity
+>    defines. When an inner environment defines no `onExit` — or defines no `script` at all (a
+>    `variables:`-only environment) — there is nothing to replace, and the corresponding wrap
+>    hook must not run for that environment. Every `<StepScript>` defines `onRun`, so
+>    `onWrapTaskRun` runs for every task.
 
 #### 4.3.1. Wrap hook template variables
 

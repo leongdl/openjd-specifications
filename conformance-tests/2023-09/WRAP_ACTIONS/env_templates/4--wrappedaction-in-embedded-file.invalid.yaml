@@ -1,0 +1,28 @@
+# Template Schemas 4 (format string scopes, items 5-7): WrappedAction.*
+# may be referenced only within the three wrap hooks. An
+# <EnvironmentScript>'s embeddedFiles are shared by ALL of the script's
+# actions — including the environment's own onEnter/onExit, where
+# WrappedAction.* never exists — so a WrappedAction.* reference in an
+# embedded file's data is outside the hooks' scope and must be rejected
+# at validation time rather than failing (or half-working) at run time.
+specificationVersion: environment-2023-09
+extensions:
+- WRAP_ACTIONS
+- EXPR
+environment:
+  name: WrapEnv
+  script:
+    embeddedFiles:
+    - name: Helper
+      type: TEXT
+      data: "wrapped command is {{WrappedAction.Command}}"
+    actions:
+      onWrapEnvEnter:
+        command: bash
+        args: ["-c", "echo enter"]
+      onWrapTaskRun:
+        command: bash
+        args: ["-c", "echo task"]
+      onWrapEnvExit:
+        command: bash
+        args: ["-c", "echo exit"]

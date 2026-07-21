@@ -109,8 +109,21 @@ WRAP_ACTIONS/
     ├── wrap-cancelation-roundtrip-terminate.test.yaml
     ├── wrap-cancelation-roundtrip-no-cancelation.test.yaml
     ├── wrap-cancelation-roundtrip-period-only.test.yaml
+    ├── wrap-cancelation-roundtrip-job-environment.test.yaml
     ├── wrap-cancelation-partial-fmtstring-mode.test.yaml
+    │  # Run-time cancelation validation (§5.3: "the runtime MUST fail the action")
+    ├── wrap-cancelation-mode-resolves-invalid-fails.test.yaml
+    ├── wrap-cancelation-terminate-with-period-fails.test.yaml
+    ├── wrap-cancelation-period-over-cap-fails.test.yaml
+    │  # Environment-template scope carried to wrap hooks
+    ├── wrap-env-template-parameters-in-hooks.test.yaml
+    ├── wrap-env-let-bindings-in-hooks.test.yaml
     ├── wrap-openjd-env-from-wrapped-onenter-propagates.test.yaml
+    ├── wrap-openjd-fail-from-wrapped-process.test.yaml
+    ├── wrap-environment-excludes-variables-map.test.yaml
+    │  # Failure semantics & cleanup guarantees
+    ├── wrap-failed-enter-still-runs-wrap-exit.test.yaml
+    ├── wrap-inner-env-without-on-exit-skips-exit-hook.test.yaml
     │  # Exit-status propagation
     ├── wrap-exit-status-propagates.test.yaml
     ├── wrap-exit-status-python.test.yaml
@@ -133,9 +146,18 @@ WRAP_ACTIONS/
     ├── wrap-without-expr-extension.invalid.test.yaml
     ├── wrap-cancelation-fmtstring-mode-no-feature-bundle.invalid.test.yaml
     ├── wrap-multiple-wrap-envs-rejected.invalid.test.yaml
+    ├── wrap-two-wrap-env-templates-rejected.invalid.test.yaml
     ├── wrap-job-and-step-env-rejected.invalid.test.yaml
     ├── wrap-partial-hooks-rejected.invalid.test.yaml
     └── wrap-wrappedaction-outside-wrap-hook-rejected.invalid.test.yaml
+```
+
+Two additional env-template validation fixtures cover the variable scope
+rule beyond action args (`env_templates/`):
+
+```
+    ├── 4--wrappedaction-in-cancelation-outside-hook.invalid.yaml
+    └── 4--wrappedaction-in-embedded-file.invalid.yaml
 ```
 
 Most execution tests use POSIX shell commands (`sh`, `echo`, `printf`) and
@@ -228,9 +250,55 @@ bundles in this directory:
     normal format string behavior — partial interpolation like
     `"{{ ... }}_THEN_TERMINATE"` is valid; the resolved value is checked
     against the two mode names at run time)
+- **Run-time cancelation validation** (Template Schemas §5.3: after a
+  format-string `mode` resolves, "the object MUST then validate against
+  that form's schema" and "Any other resolved value is an error; the
+  runtime MUST fail the action"; §5.3.2 caps the notify period at 600).
+  Constant expressions could be folded and rejected during validation, so
+  each fixture derives its invalid value from `WrappedAction.*` — seeded
+  per-action at host evaluation time, unknowable statically or at job
+  creation — forcing the check to happen where the spec requires it. The
+  wrapped action's script must never run:
+  - `wrap-cancelation-mode-resolves-invalid-fails` (forwarded mode plus a
+    literal suffix resolves to a non-mode string)
+  - `wrap-cancelation-terminate-with-period-fails` (forwarded mode
+    resolves `TERMINATE` with a non-null period)
+  - `wrap-cancelation-period-over-cap-fails` (forwarded period plus an
+    offset resolves over the 600-second cap)
+- **Round-trip forwarding through job instantiation**: the same
+  forwarding pattern with the wrap env declared in `jobEnvironments`, so
+  the template passes through job creation where `WrappedAction.*`
+  cannot exist yet — resolution of the forwarded `timeout` /
+  `notifyPeriodInSeconds` must defer to run time
+  (`wrap-cancelation-roundtrip-job-environment`).
+- **Environment-template scope in hooks**: a wrap environment template's
+  own `parameterDefinitions` and script-level `let` bindings resolve
+  inside all three hooks (`wrap-env-template-parameters-in-hooks`,
+  `wrap-env-let-bindings-in-hooks`) — the wrapped step's symbol table
+  knows nothing about them, so the runtime must carry the environment's
+  own scope to its hooks.
+- **`WrappedAction.Environment` is openjd_env-only** (§4.3.1): an inner
+  environment's declarative `variables:` map must not surface in the
+  forwarded list (`wrap-environment-excludes-variables-map`).
+- **Session-level single-layer rule**: two wrap-defining environments
+  supplied as *separate* environment templates — no single template is
+  invalid, so only the session/runner can reject the stack
+  (`wrap-two-wrap-env-templates-rejected`).
+- **Cleanup guarantee** (RFC 0008 "Lifecycle and cleanup guarantees"):
+  a failed `onWrapEnvEnter` still runs the inner environment's
+  `onWrapEnvExit` and the wrapping environment's own `onExit`, and the
+  failing hook's exit code is the surfaced task failure
+  (`wrap-failed-enter-still-runs-wrap-exit`).
+- **Exit-hook skip**: an inner environment with no `onExit` has nothing
+  to replace, so `onWrapEnvExit` must not fire for it
+  (`wrap-inner-env-without-on-exit-skips-exit-hook`).
 - **`openjd_env` propagation**: variables emitted by a wrapped `onEnter`
   surface in `WrappedAction.Environment` for subsequent wrapped actions
   (`wrap-openjd-env-from-wrapped-onenter-propagates`).
+- **`openjd_fail` propagation**: a failure macro emitted by the wrapped
+  process is recognized through the wrap script's forwarded stdout, and
+  the wrapped exit status propagates
+  (`wrap-openjd-fail-from-wrapped-process`).
 - **Exit-status propagation**: a non-zero wrapped process fails the wrap
   action and therefore the task (`wrap-exit-status-propagates`, plus the
   `-python` and `-windows` variants).
@@ -249,10 +317,18 @@ bundles in this directory:
   - `wrap-without-extension-fails`: hooks require the `WRAP_ACTIONS` extension.
   - `wrap-without-expr-extension`: `WRAP_ACTIONS` requires `EXPR`.
   - `wrap-multiple-wrap-envs-rejected`: at most one wrap env per session.
+  - `wrap-two-wrap-env-templates-rejected`: the same rule across two
+    separately-supplied environment templates (session-level check).
   - `wrap-job-and-step-env-rejected`: single-wrap-layer rule across job and
     step environments.
   - `wrap-partial-hooks-rejected`: all-or-nothing rule (job side).
   - `wrap-wrappedaction-outside-wrap-hook-rejected`: variable scope rule (job side).
+  - `4--wrappedaction-in-cancelation-outside-hook`: scope rule applies to an
+    action's cancelation fields, not just command/args/timeout (env side).
+  - `4--wrappedaction-in-embedded-file`: scope rule applies to embedded file
+    `data` — embedded files are shared by all of the script's actions,
+    including the env's own `onEnter`/`onExit` where `WrappedAction.*`
+    never exists (env side).
   - `4.3--wrap-only-onwrap-task-run`: all-or-nothing rule (env side).
   - `4.3--wrap-missing-onwrap-exit`: all-or-nothing rule (env side).
   - `4.2--empty-actions-no-wrap-no-enter-no-exit`: an `actions` block must
