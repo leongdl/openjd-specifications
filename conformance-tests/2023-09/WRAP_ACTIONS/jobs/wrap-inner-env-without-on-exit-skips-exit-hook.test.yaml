@@ -1,11 +1,11 @@
-# Template Schemas 4.3 / How-Jobs-Are-Run: onWrapEnvExit "runs instead of
-# the onExit action of every inner environment". When the inner
-# environment defines no onExit there is nothing to replace, so the exit
-# hook must NOT fire for that environment — a runtime that runs the hook
-# unconditionally would execute wrapper teardown logic (e.g. a container
-# exec) against an action that does not exist. onEnter is required by the
-# base schema, so the enter side of this edge is unrepresentable; this
-# fixture pins the testable exit half.
+# Template Schemas 4.3, WRAP_ACTIONS constraint 5 (nothing-to-replace
+# rule): "A wrap hook runs only in place of an action the inner entity
+# defines." When the inner environment defines no onExit there is nothing
+# to replace, so the exit hook must NOT fire for that environment — a
+# runtime that runs the hook unconditionally would execute wrapper
+# teardown logic (e.g. a container exec) against an action that does not
+# exist. onEnter is required by the base schema, so the enter side of
+# this edge is unrepresentable; this fixture pins the testable exit half.
 template:
   specificationVersion: jobtemplate-2023-09
   name: WrapInnerEnvWithoutOnExitSkipsExitHook
