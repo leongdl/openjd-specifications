@@ -1,0 +1,39 @@
+# Template Schemas 3.4.1.1.1: the number of values an <IntRangeExpr> expands
+# to "is not constrained by this specification" — the 1024-element cap in
+# 3.4.1.1 applies only to the literal <IntRangeList> form. A user-SUPPLIED
+# RANGE_EXPR value of "1-1025" therefore expands to 1025 tasks and job
+# creation must SUCCEED. (The capped list form is pinned by the
+# 3.4--range-from-list-param-* pair; the static-template analog of this
+# accept is mainline's 3.4--wide-int-range-expression.yaml.)
+#
+# Note: this test runs 1025 (trivial) tasks — a few seconds on the Rust CLI,
+# ~3 minutes on the Python CLI (one subprocess per task).
+template:
+  specificationVersion: jobtemplate-2023-09
+  extensions:
+  - EXPR
+  name: TestJob
+  parameterDefinitions:
+  - name: Frames
+    type: RANGE_EXPR
+  steps:
+  - name: Step1
+    parameterSpace:
+      taskParameterDefinitions:
+      - name: Frame
+        type: INT
+        range: "{{RawParam.Frames}}"
+    script:
+      actions:
+        onRun:
+          command: python
+          args:
+          - -c
+          - print(r'TASK:{{Task.Param.Frame}}:END')
+parameters:
+  Frames: "1-1025"
+expected:
+  output:
+  - TASK:1:END
+  - TASK:1024:END
+  - TASK:1025:END

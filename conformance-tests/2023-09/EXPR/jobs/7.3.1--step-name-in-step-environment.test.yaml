@@ -1,0 +1,44 @@
+# Template Schemas 7.3.1 (Step.Name is defined by RFC 0005; the section
+# number is the Template Schemas wiki's): Step.Name is available to a
+# step's environments at run
+# time — both directly and through step-level `let` bindings, in the
+# environment's onEnter and onExit alike. (Static acceptance is pinned by
+# job_templates/7.3.1--step-name-in-step-environment.yaml; the negative
+# polarity — Step.Name unavailable in job environments — by the
+# 7.3.1--step-name-in-job-environment*.invalid fixtures.)
+template:
+  specificationVersion: jobtemplate-2023-09
+  extensions:
+  - EXPR
+  name: TestJob
+  steps:
+  - name: EchoStepName
+    let:
+    - banner = 'step-is-' + Step.Name
+    stepEnvironments:
+    - name: NameEcho
+      script:
+        actions:
+          onEnter:
+            command: python
+            args:
+            - -c
+            - "print(r'ENTER_DIRECT:{{ Step.Name }}')\nprint(r'ENTER_LET:{{ banner }}')"
+          onExit:
+            command: python
+            args:
+            - -c
+            - "print(r'EXIT_LET:{{ banner }}')"
+    script:
+      actions:
+        onRun:
+          command: python
+          args:
+          - -c
+          - print(r'TASK:{{ Step.Name }}')
+expected:
+  output:
+  - ENTER_DIRECT:EchoStepName
+  - ENTER_LET:step-is-EchoStepName
+  - TASK:EchoStepName
+  - EXIT_LET:step-is-EchoStepName
