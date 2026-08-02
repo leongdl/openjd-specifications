@@ -171,7 +171,9 @@ def extract_comment_directive(template_path: Path):
     Returns (spec, None) when a directive is present, (None, None) when
     absent, or (None, error_message) when a directive is malformed.
     """
-    with open(template_path, encoding="utf-8") as f:
+    # errors="replace": a non-UTF-8 template must never crash the runner (the
+    # bytes are the CLI's to judge); we only scan for an ASCII directive.
+    with open(template_path, encoding="utf-8", errors="replace") as f:
         lines = f.read().splitlines()
 
     block = []
@@ -183,6 +185,24 @@ def extract_comment_directive(template_path: Path):
         if line.startswith(" "):
             line = line[1:]
         block.append(line)
+
+    # A directive in a comment PAST the leading block would otherwise be
+    # silently ignored, quietly reverting the fixture to single-bit — the
+    # exact failure mode this feature exists to kill. Hard error instead.
+    # (A non-comment YAML key `expectedError:` in the template body is the
+    # CLI's problem, not ours.)
+    for line in lines[len(block):]:
+        if not line.startswith("#"):
+            continue
+        content = line[1:]
+        if content.startswith(" "):
+            content = content[1:]
+        if content.startswith("expectedError:"):
+            return None, (
+                "expectedError directive found outside the leading comment "
+                "block; move it into the contiguous '#' block at the top of "
+                "the file"
+            )
 
     start = next((i for i, line in enumerate(block) if line.startswith("expectedError:")), None)
     if start is None:
@@ -309,7 +329,7 @@ def check_output_membership(expected: dict, output: str) -> str | None:
             return f"Missing expected output: {line}\n--- Actual output ---\n{output}"
     for line in forbidden:
         if line in output:
-            return f"Found forbidden output: {line}"
+            return f"Found forbidden output: {line}\n--- Actual output ---\n{output}"
     return None
 
 
@@ -423,7 +443,8 @@ def run_job(test_path: Path) -> tuple[bool, str] | None:
                 return False, error
         return True, output
 
-    error = check_job_expectations(test.get("expected", {}), returncode, output)
+    # `or {}`: an explicit `expected:` null block must not crash the runner.
+    error = check_job_expectations(test.get("expected") or {}, returncode, output)
     if error is not None:
         return False, error
     return True, output

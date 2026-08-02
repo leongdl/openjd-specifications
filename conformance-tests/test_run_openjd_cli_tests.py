@@ -42,7 +42,8 @@ def main():
         sys.exit(2)
     command, path = sys.argv[1], sys.argv[2]
     if command == "check":
-        with open(path, encoding="utf-8") as f:
+        # errors="replace" so non-UTF-8 fixtures exercise the runner, not us.
+        with open(path, encoding="utf-8", errors="replace") as f:
             text = f.read()
         code = 0
         for line in text.splitlines():
@@ -294,6 +295,77 @@ def test_template_directive_malformed_is_hard_failure(fake_cli, tmp_path, direct
     ok, detail = runner.run_template_test(path)
     assert not ok
     assert "Malformed expectedError comment directive" in detail
+
+
+def test_template_non_utf8_bytes_do_not_crash(fake_cli, tmp_path):
+    # A non-UTF-8 template must not crash extraction; with no directive in
+    # the leading block it is treated as directive-absent (single-bit).
+    path = tmp_path / "latin1.invalid.yaml"
+    path.write_bytes(b"# pr\xe9amble\n# FAKE-CHECK-ERROR: nope\nname: X\n")
+    spec, err = runner.extract_comment_directive(path)
+    assert (spec, err) == (None, None)
+    ok, _ = runner.run_template_test(path)
+    assert ok
+
+
+def test_template_non_utf8_bytes_with_ascii_directive_still_extracts(fake_cli, tmp_path):
+    # A latin-1 preamble in the leading block must not stop an ASCII
+    # directive in the same block from being extracted and enforced.
+    path = tmp_path / "latin1-directive.invalid.yaml"
+    path.write_bytes(
+        b"# pr\xe9amble\n"
+        b"# FAKE-CHECK-ERROR: bad flavor\n"
+        b'# expectedError: "bad flavor"\n'
+        b"name: X\n"
+    )
+    spec, err = runner.extract_comment_directive(path)
+    assert err is None
+    assert spec == "bad flavor"
+    ok, _ = runner.run_template_test(path)
+    assert ok
+
+
+def test_template_directive_after_blank_line_is_hard_failure(fake_cli, tmp_path):
+    # A directive in a comment AFTER the leading contiguous block would be
+    # silently ignored (single-bit regression) — hard error instead.
+    path = tmp_path / "t.invalid.yaml"
+    path.write_text(
+        "# FAKE-CHECK-ERROR: nope\n"
+        "\n"
+        '# expectedError: "nope"\n'
+        "name: X\n",
+        encoding="utf-8",
+    )
+    ok, detail = runner.run_template_test(path)
+    assert not ok
+    assert "outside the leading comment block" in detail
+
+
+def test_template_directive_after_yaml_body_is_hard_failure(fake_cli, tmp_path):
+    path = tmp_path / "t.invalid.yaml"
+    path.write_text(
+        "# FAKE-CHECK-ERROR: nope\n"
+        "name: X\n"
+        '# expectedError: "nope"\n',
+        encoding="utf-8",
+    )
+    ok, detail = runner.run_template_test(path)
+    assert not ok
+    assert "outside the leading comment block" in detail
+
+
+def test_non_comment_expected_error_key_in_body_is_not_a_directive(fake_cli, tmp_path):
+    # Negative control: a real YAML key `expectedError:` in the template
+    # body is the CLI's problem, not a runner directive.
+    path = tmp_path / "t.invalid.yaml"
+    path.write_text(
+        "# FAKE-CHECK-ERROR: nope\n"
+        "name: X\n"
+        "expectedError: not-a-directive\n",
+        encoding="utf-8",
+    )
+    ok, _ = runner.run_template_test(path)
+    assert ok
 
 
 def test_template_invalid_without_directive_single_bit(fake_cli, tmp_path):
@@ -584,11 +656,22 @@ def test_legacy_anyof_in_expected_output_still_works(fake_cli, tmp_path):
 
 
 def test_forbidden_still_enforced(fake_cli, tmp_path):
-    # Case 19: forbidden assertions unchanged.
+    # Case 19: forbidden assertions unchanged; the failure detail keeps the
+    # run log (parity with every other failure message).
     doc = job_doc([["OUT:hello world"]], expected={"forbidden": ["hello"]})
     ok, detail = run_job_fixture(tmp_path, "forbid.test.yaml", doc)
     assert not ok
     assert "Found forbidden output: hello" in detail
+    assert "--- Actual output ---" in detail
+    assert "hello world" in detail
+
+
+def test_explicit_null_expected_block_passes(fake_cli, tmp_path):
+    # An explicit `expected:` null block must behave like an absent one,
+    # not crash the runner.
+    doc = job_doc([["OUT:hi"]], expected=None)
+    ok, _ = run_job_fixture(tmp_path, "nullexp.test.yaml", doc)
+    assert ok
 
 
 def test_template_dir_runner_tuple_and_passes(fake_cli, tmp_path, monkeypatch):
