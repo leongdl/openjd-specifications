@@ -64,6 +64,11 @@ expected:
   - "WRAP ENTER FAILING"
   - "WRAP EXIT RAN for InnerEnv"
   - "WRAPENV OWN EXIT RAN"
+  # RFC 0008 cleanup order: the inner environment is exited THROUGH the wrap
+  # layer (onWrapEnvExit) BEFORE the wrapping environment's own onExit runs.
+  outputSequence:
+  - "WRAP EXIT RAN for InnerEnv"
+  - "WRAPENV OWN EXIT RAN"
   forbidden:
   - "TASK BODY RAN"
   - "INNER ENTER BODY"
