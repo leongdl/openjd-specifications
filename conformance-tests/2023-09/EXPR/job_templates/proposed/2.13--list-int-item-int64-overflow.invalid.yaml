@@ -1,0 +1,23 @@
+# PARKED (see README-param-types.md): a LIST[INT] default element of
+# 9223372036854775808 (2^63) exceeds the int64 range (Expression Language
+# 1.2.1 — the bound comes from the EXPR type table, not section 2.13
+# itself) and must be rejected. Both implementations currently accept it.
+# Accept twin at 2^63-1: 2.13--list-int-item-int64-max.yaml
+# (param-types-gaps PR).
+specificationVersion: jobtemplate-2023-09
+extensions:
+- EXPR
+name: TestJob
+parameterDefinitions:
+- name: Values
+  type: LIST[INT]
+  default: [9223372036854775808]
+steps:
+- name: Step1
+  script:
+    actions:
+      onRun:
+        command: python
+        args:
+        - "-c"
+        - "print()"
