@@ -2,8 +2,8 @@
 
 Runs the conformance runner in-process against a FAKE `openjd` executable
 (written to a temp dir and prepended to PATH), so no real CLI is needed.
-Each test cites the numbered case from the harness design doc's self-test
-section ("Case N").
+Case N refers to the numbered self-test contract in this file's history/PR
+description.
 
 Run with: uv run --with pytest,pyyaml python -m pytest test_run_openjd_cli_tests.py -v
 """
@@ -19,6 +19,12 @@ import yaml
 # No package here; import the runner module from this directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import run_openjd_cli_tests as runner  # noqa: E402
+
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="fake openjd CLI is a POSIX sh shim; the runner itself is "
+    "exercised on Windows by the conformance CI",
+)
 
 THIS_OS = runner.OPERATING_SYSTEM
 OTHER_OS = "windows" if THIS_OS == "posix" else "posix"
@@ -174,6 +180,22 @@ def test_expected_error_contains_list_one_missing_fails(fake_cli, tmp_path):
     assert not ok
     assert "zzz-not-there" in detail
     assert "['zzz-not-there']" in detail  # 'bad flavor' matched, so not listed missing
+
+
+def test_expected_error_contains_and_anyof_are_conjunctive(fake_cli, tmp_path):
+    # contains AND anyOf in one spec: both clauses must hold independently.
+    doc = job_doc(FAILING_ARGS, expectedError={
+        "contains": "bad flavor", "anyOf": ["absent-a", "absent-b"],
+    })
+    ok, detail = run_job_fixture(tmp_path, "conj.invalid.test.yaml", doc)
+    assert not ok
+    assert "None of the expected error alternatives matched" in detail
+
+    doc = job_doc(FAILING_ARGS, expectedError={
+        "contains": "bad flavor", "anyOf": ["absent-a", "exited with code: 1"],
+    })
+    ok, _ = run_job_fixture(tmp_path, "conj.invalid.test.yaml", doc)
+    assert ok
 
 
 def test_expected_error_string_shorthand_passes(fake_cli, tmp_path):
@@ -423,6 +445,20 @@ def test_output_sequence_order_swapped_fails(fake_cli, tmp_path):
     assert "GAMMA" in detail  # full output included
 
 
+def test_output_sequence_repeated_entry_needs_two_occurrences(fake_cli, tmp_path):
+    # A repeated chain entry must match again after the END of the previous
+    # match: one occurrence cannot satisfy both entries of ["MARK", "MARK"].
+    doc = job_doc([["OUT:MARK"]], expected={"outputSequence": ["MARK", "MARK"]})
+    ok, detail = run_job_fixture(tmp_path, "overlap.test.yaml", doc)
+    assert not ok
+    assert "outputSequence violated" in detail
+    assert "'MARK' not found after 'MARK'" in detail
+
+    doc = job_doc([["OUT:MARK", "OUT:MARK"]], expected={"outputSequence": ["MARK", "MARK"]})
+    ok, _ = run_job_fixture(tmp_path, "overlap.test.yaml", doc)
+    assert ok
+
+
 def test_output_sequence_composes_with_task_failure_passes(fake_cli, tmp_path):
     # Case 13: failing run + ordered cleanup markers -> pass.
     doc = job_doc([["OUT:CLEAN-INNER", "OUT:CLEAN-OUTER", "EXITCODE:7"]], expected={
@@ -485,6 +521,33 @@ def test_output_sequence_platform_variant_violation_fails(fake_cli, tmp_path):
     assert "outputSequence violated" in detail
 
 
+def test_output_sequence_base_and_platform_variant_both_enforced(fake_cli, tmp_path):
+    # Base outputSequence AND outputSequence_<os> both present: a violation
+    # in EITHER fails; the test passes only when both hold.
+    violating = ["GAMMA", "ALPHA"]
+    satisfied = ["ALPHA", "BETA"]
+
+    doc = job_doc(ORDERED_ARGS, expected={
+        "outputSequence": violating, f"outputSequence_{THIS_OS}": satisfied,
+    })
+    ok, detail = run_job_fixture(tmp_path, "both.test.yaml", doc)
+    assert not ok
+    assert "outputSequence violated" in detail
+
+    doc = job_doc(ORDERED_ARGS, expected={
+        "outputSequence": satisfied, f"outputSequence_{THIS_OS}": violating,
+    })
+    ok, detail = run_job_fixture(tmp_path, "both.test.yaml", doc)
+    assert not ok
+    assert "outputSequence violated" in detail
+
+    doc = job_doc(ORDERED_ARGS, expected={
+        "outputSequence": satisfied, f"outputSequence_{THIS_OS}": ["BETA", "GAMMA"],
+    })
+    ok, _ = run_job_fixture(tmp_path, "both.test.yaml", doc)
+    assert ok
+
+
 @pytest.mark.parametrize(
     "chains, fragment",
     [
@@ -542,6 +605,15 @@ def test_task_count_off_by_one_fails(fake_cli, tmp_path):
     assert "Expected taskCount 3 but counted 2" in detail
 
 
+def test_task_count_overcount_fails(fake_cli, tmp_path):
+    # Case 17: taskCount is exact in BOTH directions — more banners than
+    # expected is a failure too, not just fewer.
+    doc = job_doc(TASK_COUNT_ARGS, expected={"taskCount": 1})
+    ok, detail = run_job_fixture(tmp_path, "count.test.yaml", doc)
+    assert not ok
+    assert "Expected taskCount 1 but counted 2" in detail
+
+
 @pytest.mark.parametrize("value", [-1, "2", True, None, 1.5])
 def test_task_count_malformed_is_hard_failure(fake_cli, tmp_path, value):
     # Case 17: non-int or negative taskCount is a hard failure.
@@ -559,6 +631,24 @@ def test_task_count_zero_composes_with_failure(fake_cli, tmp_path):
     })
     ok, _ = run_job_fixture(tmp_path, "count0.test.yaml", doc)
     assert ok
+
+
+def test_task_failure_exit_code_uses_first_nonzero_line(fake_cli, tmp_path):
+    # The FIRST non-zero 'exited with code' line is the failing action's
+    # code; later lines belong to teardown actions. The fake CLI prints one
+    # line per EXITCODE directive and exits with the LAST, so two steps
+    # yield lines for 7 then 3 in a single run output.
+    args = [["EXITCODE:7"], ["EXITCODE:3"]]
+
+    doc = job_doc(args, expected={"taskFailure": {"exitCode": 7}})
+    ok, _ = run_job_fixture(tmp_path, "firstcode.test.yaml", doc)
+    assert ok
+
+    doc = job_doc(args, expected={"taskFailure": {"exitCode": 3}})
+    ok, detail = run_job_fixture(tmp_path, "firstcode.test.yaml", doc)
+    assert not ok
+    assert "Expected task exitCode 3" in detail
+    assert "exited with 7" in detail
 
 
 # ---------------------------------------------------------------------------
@@ -591,6 +681,28 @@ def test_single_file_skip_returns_skipped_count(fake_cli, tmp_path):
     assert runner.run_single_file(path) == (0, 0, 1, [])
 
 
+def test_single_file_template_branch_runs_template_test(fake_cli, tmp_path):
+    # run_single_file dispatches non-.test.yaml paths through
+    # run_template_test, and its verdict decides the returned tuple.
+    positive = tmp_path / "good.yaml"
+    positive.write_text("# just a comment\nname: X\n", encoding="utf-8")
+    assert runner.run_single_file(positive) == (1, 0, 0, [])
+
+    satisfied = tmp_path / "sat.invalid.yaml"
+    satisfied.write_text(
+        '# FAKE-CHECK-ERROR: bad flavor\n# expectedError: "bad flavor"\nname: X\n',
+        encoding="utf-8",
+    )
+    assert runner.run_single_file(satisfied) == (1, 0, 0, [])
+
+    unsatisfied = tmp_path / "unsat.invalid.yaml"
+    unsatisfied.write_text(
+        '# FAKE-CHECK-ERROR: bad flavor\n# expectedError: "different reason"\nname: X\n',
+        encoding="utf-8",
+    )
+    assert runner.run_single_file(unsatisfied) == (0, 1, 0, [str(unsatisfied)])
+
+
 def test_main_reports_skips_in_summary_and_total(fake_cli, tmp_path, monkeypatch, capsys):
     # Case 18: skips appear in the per-directory summary and the Total line;
     # without the flag, an all-skipped run still exits 0.
@@ -616,6 +728,17 @@ def test_main_fail_on_skip_ratio_trips_on_all_skipped(fake_cli, tmp_path, monkey
         runner.main()
     assert excinfo.value.code == 1
     assert "Skip ratio 1.00 exceeds" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("value", ["1.5", "-0.1"])
+def test_main_fail_on_skip_ratio_out_of_bounds_is_usage_error(tmp_path, monkeypatch, value):
+    # Case 18: X outside [0, 1] is rejected up front as a usage error
+    # (argparse exits 2), not silently accepted.
+    monkeypatch.setattr(runner, "CONFORMANCE_DIR", tmp_path)
+    monkeypatch.setattr(sys, "argv", ["run_openjd_cli_tests.py", "--fail-on-skip-ratio", value])
+    with pytest.raises(SystemExit) as excinfo:
+        runner.main()
+    assert excinfo.value.code == 2
 
 
 def test_compute_exit_code_ratio_semantics():
