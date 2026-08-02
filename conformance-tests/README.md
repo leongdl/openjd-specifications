@@ -162,6 +162,52 @@ Use `taskFailure` instead of the `.invalid.test.yaml` suffix when you also want 
 
 The `runOn` field restricts a test to run only on the listed operating systems. If omitted, the test runs on all platforms. Use this when a test requires a platform-specific command (e.g., `cmd` or `powershell` on Windows, `bash` on POSIX).
 
+### Additional Assertion Keys
+
+These optional keys pin down *why* a fixture fails and *how* a run is ordered, beyond the single accept/reject bit.
+
+The `expectedError` key (on `.invalid.test.yaml` job fixtures) pins the reason a fixture was rejected, so a fixture that is rejected for an unrelated reason (a typo, an unrelated validation rule) fails instead of silently passing. A plain string is shorthand for `contains`. `contains` may be a string or a list of strings that must ALL appear in the run output; `anyOf` is a list of which at least ONE must appear — `anyOf` exists because implementations phrase the same rule differently. Matching is case-sensitive substring containment, and when `contains` and `anyOf` are both given, both must hold.
+
+```yaml
+template:
+  # ... a template that must be rejected at runtime ...
+expectedError:
+  anyOf:
+    - "must be greater than or equal to 1"
+    - "must be at least 1"
+```
+
+Raw template fixtures (`job_templates/`, `env_templates/`) are passed to `openjd check` verbatim, so a foreign YAML key would itself change validation. For those, the directive instead lives in the contiguous `#` comment block at the top of the file. The directive must appear in that leading block: a directive in a comment anywhere after it is a hard error (it would otherwise be silently ignored), and positive (non-`.invalid`) templates may not carry one.
+
+```yaml
+# expectedError:
+#   contains: "uses reserved scope 'worker'"
+specificationVersion: jobtemplate-2023-09
+# ...
+```
+
+The `expected.outputSequence` key asserts an ordered subsequence over the run output: entries must appear in order but need not be adjacent. A flat list of strings is one chain; a list of lists is independent chains (e.g. diamond dependencies whose two branches are mutually unordered). The `outputSequence_posix` / `outputSequence_windows` variants are each checked as their own independent chain set, never concatenated with the base list. A chain needs at least 2 entries (a 1-entry chain is a membership check — use `expected.output`). `outputSequence` is not allowed in `.invalid` fixtures; write failure-ordering cases as `.test.yaml` with `expected.taskFailure` instead.
+
+```yaml
+expected:
+  outputSequence:
+    - ["ROOT", "BRANCH-A", "LEAF"]
+    - ["ROOT", "BRANCH-B", "LEAF"]
+```
+
+The `expected.taskCount` key asserts the exact number of task runs in the output, counted via the task banner conforming CLIs emit once per task run.
+
+```yaml
+expected:
+  taskCount: 4
+```
+
+Fixtures skipped via `runOn` are reported per directory and in the final `Total:` line, and the runner's `--fail-on-skip-ratio X` flag (X in [0, 1]) exits non-zero when skipped/(passed+failed+skipped) exceeds X, so platform-restricted fixtures cannot silently become the majority of a run.
+
+Note that an `expected:` block in an `.invalid` fixture is NOT enforced (a historical quirk; the runner prints a note when it discards one).
+
+The runner's own self-tests can be run with `uv run --with pytest,pyyaml python -m pytest test_run_openjd_cli_tests.py`.
+
 ## Writing Your Own Test Runner
 
 To validate your OpenJD library against these tests:
