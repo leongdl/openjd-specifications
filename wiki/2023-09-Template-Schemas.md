@@ -1152,6 +1152,8 @@ With:
 
 Subject to the constraint no two ranges in the expression are allowed to overlap.
 
+The number of values that an `<IntRangeExpr>` expands to is not constrained by this specification. In particular, the maximum of 1024 elements that §3.4.1.1 places on an `<IntRangeList>` does not apply to this form; expressing a range of more than 1024 values, such as a long frame range, is the motivating use-case for it. An implementation that needs to bound the number of Tasks a Step may define is expected to do so with its own limit on the Task count, not by constraining this expression.
+
 The elements of the range expression are combined to form a list of values in increasing order.
 
 For example:
