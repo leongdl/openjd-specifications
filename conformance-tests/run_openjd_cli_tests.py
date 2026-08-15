@@ -139,7 +139,20 @@ def run_job(test_path: Path) -> tuple[bool, str] | None:
         # propagation is verified for a non-.invalid. test that must still make
         # assertions about its output.
         task_failure = expected.get("taskFailure")
-        if task_failure is not None:
+        if task_failure is None:
+            # A valid test with no declared task failure must run clean. Without
+            # this the verdict rests entirely on substring matching, and a case
+            # whose task failed still passes as long as the expected lines appear
+            # somewhere in the output -- including inside the failure's own
+            # diagnostics. Self-asserting cases depend on this check: they carry
+            # their verdict in the task's exit status.
+            if result.returncode != 0:
+                return False, (
+                    f"Run exited {result.returncode}; a valid test with no "
+                    "expected.taskFailure must exit 0.\n"
+                    f"--- Actual output ---\n{output}"
+                )
+        else:
             if result.returncode == 0:
                 return False, (
                     "Expected task failure (non-zero run exit) but the run "
