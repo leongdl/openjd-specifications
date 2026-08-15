@@ -129,10 +129,89 @@ template:
   steps:
   - name: Step1
     script:
+      embeddedFiles:
+      - name: OpenJDConformanceAssert
+        type: TEXT
+        data: |
+          # Self-asserting conformance wrapper. Runs `sys.argv[1:]` -- this case's original
+          # command, expanded by the implementation -- echoes its output so a runner that
+          # scans logs still sees the same lines, then checks that output against the
+          # literals below and exits non-zero on mismatch, so task exit status alone carries
+          # the verdict. The literals are literals, and diagnostics report a line's position
+          # rather than its text; conformance-tests/README.md, "Self-asserting job tests",
+          # says why both matter.
+          import subprocess
+          import sys
+
+          EXPECTED = [
+              "False:v_False",
+              "None:v_None",
+              "True:v_True",
+              "and:v_and",
+              "as:v_as",
+              "assert:v_assert",
+              "async:v_async",
+              "await:v_await",
+              "break:v_break",
+              "class:v_class",
+              "continue:v_continue",
+              "def:v_def",
+              "del:v_del",
+              "elif:v_elif",
+              "else:v_else",
+              "except:v_except",
+              "finally:v_finally",
+              "for:v_for",
+              "from:v_from",
+              "global:v_global",
+              "if:v_if",
+              "import:v_import",
+              "in:v_in",
+              "is:v_is",
+              "lambda:v_lambda",
+              "nonlocal:v_nonlocal",
+              "not:v_not",
+              "or:v_or",
+              "pass:v_pass",
+              "raise:v_raise",
+              "return:v_return",
+              "try:v_try",
+              "while:v_while",
+              "with:v_with",
+              "yield:v_yield",
+              "_:v__",
+              "case:v_case",
+              "match:v_match",
+              "type:v_type",
+              "COND:v_if",
+              "LOGIC:v_and",
+          ]
+          FORBIDDEN = []
+          completed = subprocess.run(sys.argv[1:], capture_output=True, text=True)
+          sys.stdout.write(completed.stdout)
+          sys.stderr.write(completed.stderr)
+          output = completed.stdout + completed.stderr
+
+          problems = []
+          if completed.returncode != 0:
+              problems.append("command exited with code %d" % completed.returncode)
+          problems += ["expected output line %d of %d not found" % (i, len(EXPECTED))
+                       for i, line in enumerate(EXPECTED, 1) if line not in output]
+          problems += ["forbidden output line %d of %d was present" % (i, len(FORBIDDEN))
+                       for i, line in enumerate(FORBIDDEN, 1) if line in output]
+
+          for problem in problems:
+              sys.stderr.write("OPENJD_CONFORMANCE_ASSERT_FAILED: %s\n" % problem)
+          if problems:
+              sys.exit(1)
+          sys.stdout.write("OPENJD_CONFORMANCE_ASSERT_OK: %d expected, %d forbidden\n"
+                           % (len(EXPECTED), len(FORBIDDEN)))
       actions:
         onRun:
           command: python
           args:
+          - '{{Task.File.OpenJDConformanceAssert}}'
+          - python
           - -c
           - |
             print(r'False:{{ Param.False }}')

@@ -11,10 +11,62 @@ template:
     - "rtdq = r\"\"\"raw\\ntriple\"\"\""
     - "rtsq = r'''raw\\ntriple'''"
     script:
+      embeddedFiles:
+      - name: OpenJDConformanceAssert
+        type: TEXT
+        data: |
+          # Self-asserting conformance wrapper. Runs `sys.argv[1:]` -- this case's original
+          # command, expanded by the implementation -- echoes its output so a runner that
+          # scans logs still sees the same lines, then checks that output against the
+          # literals below and exits non-zero on mismatch, so task exit status alone carries
+          # the verdict. The literals are literals, and diagnostics report a line's position
+          # rather than its text; conformance-tests/README.md, "Self-asserting job tests",
+          # says why both matter.
+          import subprocess
+          import sys
+
+          EXPECTED = [
+              "DQ:5",
+              "SQ:5",
+              "RDQ:hello\\n",
+              "RSQ:hello\\n",
+              "RDQ_LEN:7",
+              "RSQ_LEN:7",
+              "ESC_LEN:11",
+              "ESC_T_LEN:3",
+              "ESC_BS:a\\b",
+              "RAW_BS:C:\\Users\\test",
+              "TDQ_LEN:13",
+              "TSQ_LEN:13",
+              "RTDQ:raw\\ntriple",
+              "RTSQ:raw\\ntriple",
+          ]
+          FORBIDDEN = []
+          completed = subprocess.run(sys.argv[1:], capture_output=True, text=True)
+          sys.stdout.write(completed.stdout)
+          sys.stderr.write(completed.stderr)
+          output = completed.stdout + completed.stderr
+
+          problems = []
+          if completed.returncode != 0:
+              problems.append("command exited with code %d" % completed.returncode)
+          problems += ["expected output line %d of %d not found" % (i, len(EXPECTED))
+                       for i, line in enumerate(EXPECTED, 1) if line not in output]
+          problems += ["forbidden output line %d of %d was present" % (i, len(FORBIDDEN))
+                       for i, line in enumerate(FORBIDDEN, 1) if line in output]
+
+          for problem in problems:
+              sys.stderr.write("OPENJD_CONFORMANCE_ASSERT_FAILED: %s\n" % problem)
+          if problems:
+              sys.exit(1)
+          sys.stdout.write("OPENJD_CONFORMANCE_ASSERT_OK: %d expected, %d forbidden\n"
+                           % (len(EXPECTED), len(FORBIDDEN)))
       actions:
         onRun:
           command: python
           args:
+          - '{{Task.File.OpenJDConformanceAssert}}'
+          - python
           - -c
           - |
             print(r'DQ:{{ len("hello") }}')
