@@ -13,65 +13,17 @@ template:
       embeddedFiles:
       - name: OpenJDConformanceAssert
         type: TEXT
+        dataFile: _conformance_assert.py
+      - name: OpenJDConformanceExpect
+        type: TEXT
         data: |
-          # Self-asserting conformance wrapper. Runs `sys.argv[1:]` -- this case's original
-          # command, expanded by the implementation -- echoes its output so a runner that
-          # scans logs still sees the same lines, then checks that output against the
-          # literals below and exits non-zero on mismatch, so task exit status alone carries
-          # the verdict. The literals are literals, and diagnostics report a line's position
-          # rather than its text; conformance-tests/README.md, "Self-asserting job tests",
-          # says why both matter.
-          import subprocess
-          import sys
-
-          EXPECTED_POSIX = [
-              "S3_NOMATCH_BUCKET:s3://other-bucket/assets/file.obj",
-              "S3_NOMATCH_PREFIX:s3://my-bucket/assets2/file.obj",
-              "HTTPS_NOMATCH:https://other.com/models/scene.obj",
-              "UNMAPPED:fsx://vol/data/file.bin",
-              "S3_MATCH:/local/assets/teapot.obj",
-              "S3_EXACT:/local/assets",
-              "S3_NESTED:/local/assets/sub/dir/file.exr",
-              "HTTPS_MATCH:/cache/models/scene.obj",
-              "POSIX_STILL_WORKS:/local/shared/project/file.exr",
-          ]
-          EXPECTED_WINDOWS = [
-              "S3_NOMATCH_BUCKET:s3://other-bucket/assets/file.obj",
-              "S3_NOMATCH_PREFIX:s3://my-bucket/assets2/file.obj",
-              "HTTPS_NOMATCH:https://other.com/models/scene.obj",
-              "UNMAPPED:fsx://vol/data/file.bin",
-              "S3_MATCH:\\local\\assets\\teapot.obj",
-              "S3_EXACT:\\local\\assets",
-              "S3_NESTED:\\local\\assets\\sub\\dir\\file.exr",
-              "HTTPS_MATCH:\\cache\\models\\scene.obj",
-              "POSIX_STILL_WORKS:\\local\\shared\\project\\file.exr",
-          ]
-          EXPECTED = EXPECTED_WINDOWS if sys.platform == "win32" else EXPECTED_POSIX
-          FORBIDDEN = []
-          completed = subprocess.run(sys.argv[1:], capture_output=True, text=True)
-          sys.stdout.write(completed.stdout)
-          sys.stderr.write(completed.stderr)
-          output = completed.stdout + completed.stderr
-
-          problems = []
-          if completed.returncode != 0:
-              problems.append("command exited with code %d" % completed.returncode)
-          problems += ["expected output line %d of %d not found" % (i, len(EXPECTED))
-                       for i, line in enumerate(EXPECTED, 1) if line not in output]
-          problems += ["forbidden output line %d of %d was present" % (i, len(FORBIDDEN))
-                       for i, line in enumerate(FORBIDDEN, 1) if line in output]
-
-          for problem in problems:
-              sys.stderr.write("OPENJD_CONFORMANCE_ASSERT_FAILED: %s\n" % problem)
-          if problems:
-              sys.exit(1)
-          sys.stdout.write("OPENJD_CONFORMANCE_ASSERT_OK: %d expected, %d forbidden\n"
-                           % (len(EXPECTED), len(FORBIDDEN)))
+          {"expected_posix": ["S3_NOMATCH_BUCKET:s3://other-bucket/assets/file.obj", "S3_NOMATCH_PREFIX:s3://my-bucket/assets2/file.obj", "HTTPS_NOMATCH:https://other.com/models/scene.obj", "UNMAPPED:fsx://vol/data/file.bin", "S3_MATCH:/local/assets/teapot.obj", "S3_EXACT:/local/assets", "S3_NESTED:/local/assets/sub/dir/file.exr", "HTTPS_MATCH:/cache/models/scene.obj", "POSIX_STILL_WORKS:/local/shared/project/file.exr"], "expected_windows": ["S3_NOMATCH_BUCKET:s3://other-bucket/assets/file.obj", "S3_NOMATCH_PREFIX:s3://my-bucket/assets2/file.obj", "HTTPS_NOMATCH:https://other.com/models/scene.obj", "UNMAPPED:fsx://vol/data/file.bin", "S3_MATCH:\\local\\assets\\teapot.obj", "S3_EXACT:\\local\\assets", "S3_NESTED:\\local\\assets\\sub\\dir\\file.exr", "HTTPS_MATCH:\\cache\\models\\scene.obj", "POSIX_STILL_WORKS:\\local\\shared\\project\\file.exr"]}
       actions:
         onRun:
           command: python
           args:
           - '{{Task.File.OpenJDConformanceAssert}}'
+          - '{{Task.File.OpenJDConformanceExpect}}'
           - python
           - -c
           - |

@@ -42,63 +42,17 @@ template:
       embeddedFiles:
       - name: OpenJDConformanceAssert
         type: TEXT
+        dataFile: _conformance_assert.py
+      - name: OpenJDConformanceExpect
+        type: TEXT
         data: |
-          # Self-asserting conformance wrapper. Runs `sys.argv[1:]` -- this case's original
-          # command, expanded by the implementation -- echoes its output so a runner that
-          # scans logs still sees the same lines, then checks that output against the
-          # literals below and exits non-zero on mismatch, so task exit status alone carries
-          # the verdict. The literals are literals, and diagnostics report a line's position
-          # rather than its text; conformance-tests/README.md, "Self-asserting job tests",
-          # says why both matter.
-          import subprocess
-          import sys
-
-          EXPECTED = [
-              "S3_NAME:teapot.obj",
-              "S3_STEM:teapot",
-              "S3_SUFFIX:.obj",
-              "S3_PARENT:s3://my-bucket/assets",
-              "S3_PARTS:[\"s3://my-bucket\", \"assets\", \"teapot.obj\"]",
-              "H_NAME:scene.tar.gz",
-              "H_STEM:scene.tar",
-              "H_SUFFIX:.gz",
-              "H_SUFFIXES:[\".tar\", \".gz\"]",
-              "H_PARENT:https://example.com/models",
-              "H_PARTS:[\"https://example.com\", \"models\", \"scene.tar.gz\"]",
-              "P2_PARENT1:s3://bucket/a",
-              "P2_PARENT2:s3://bucket",
-              "P2_ROOT:s3://bucket",
-              "BARE_NAME:",
-              "BARE_PARTS:[\"s3://bucket\"]",
-              "BARE_PARENT:s3://bucket",
-              "FSX_NAME:file.bin",
-              "FSX_PARTS:[\"fsx://vol-123\", \"data\", \"file.bin\"]",
-          ]
-          FORBIDDEN = []
-          completed = subprocess.run(sys.argv[1:], capture_output=True, text=True)
-          sys.stdout.write(completed.stdout)
-          sys.stderr.write(completed.stderr)
-          output = completed.stdout + completed.stderr
-
-          problems = []
-          if completed.returncode != 0:
-              problems.append("command exited with code %d" % completed.returncode)
-          problems += ["expected output line %d of %d not found" % (i, len(EXPECTED))
-                       for i, line in enumerate(EXPECTED, 1) if line not in output]
-          problems += ["forbidden output line %d of %d was present" % (i, len(FORBIDDEN))
-                       for i, line in enumerate(FORBIDDEN, 1) if line in output]
-
-          for problem in problems:
-              sys.stderr.write("OPENJD_CONFORMANCE_ASSERT_FAILED: %s\n" % problem)
-          if problems:
-              sys.exit(1)
-          sys.stdout.write("OPENJD_CONFORMANCE_ASSERT_OK: %d expected, %d forbidden\n"
-                           % (len(EXPECTED), len(FORBIDDEN)))
+          {"expected": ["S3_NAME:teapot.obj", "S3_STEM:teapot", "S3_SUFFIX:.obj", "S3_PARENT:s3://my-bucket/assets", "S3_PARTS:[\"s3://my-bucket\", \"assets\", \"teapot.obj\"]", "H_NAME:scene.tar.gz", "H_STEM:scene.tar", "H_SUFFIX:.gz", "H_SUFFIXES:[\".tar\", \".gz\"]", "H_PARENT:https://example.com/models", "H_PARTS:[\"https://example.com\", \"models\", \"scene.tar.gz\"]", "P2_PARENT1:s3://bucket/a", "P2_PARENT2:s3://bucket", "P2_ROOT:s3://bucket", "BARE_NAME:", "BARE_PARTS:[\"s3://bucket\"]", "BARE_PARENT:s3://bucket", "FSX_NAME:file.bin", "FSX_PARTS:[\"fsx://vol-123\", \"data\", \"file.bin\"]"]}
       actions:
         onRun:
           command: python
           args:
           - '{{Task.File.OpenJDConformanceAssert}}'
+          - '{{Task.File.OpenJDConformanceExpect}}'
           - python
           - -c
           - |

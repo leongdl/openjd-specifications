@@ -84,11 +84,41 @@ def should_skip_test(test: dict) -> bool:
     return OPERATING_SYSTEM not in run_on
 
 
+def inline_data_files(node) -> None:
+    """Resolve `dataFile:` on embedded files into the `data:` the spec requires.
+
+    A harness convention, not part of the job template schema: `dataFile` names
+    a file relative to the conformance-tests root whose contents become the
+    embedded file's `data`. It exists so the self-asserting wrapper can live in
+    one flat file (`_conformance_assert.py`) instead of being copied into every
+    instrumented fixture. See README.md, "Self-asserting job tests".
+
+    Resolving it is the only preprocessing a harness has to do; everything a
+    case asserts stays in the case. `data` is required on an embedded file, so a
+    harness that skips this step submits an invalid template and fails loudly
+    rather than silently dropping the assertion.
+    """
+    if isinstance(node, dict):
+        for embedded_file in node.get("embeddedFiles") or []:
+            if isinstance(embedded_file, dict) and "dataFile" in embedded_file:
+                relative = embedded_file.pop("dataFile")
+                embedded_file["data"] = (CONFORMANCE_DIR / relative).read_text()
+        for value in node.values():
+            inline_data_files(value)
+    elif isinstance(node, list):
+        for value in node:
+            inline_data_files(value)
+
+
 def run_job(test_path: Path) -> tuple[bool, str] | None:
     test = load_yaml_or_json(test_path)
 
     if should_skip_test(test):
         return None
+
+    inline_data_files(test.get("template"))
+    for environment in test.get("environments", []):
+        inline_data_files(environment)
 
     expect_failure = ".invalid." in test_path.name
 

@@ -170,23 +170,46 @@ The `runOn` field restricts a test to run only on the listed operating systems. 
 ### Self-asserting job tests
 
 Many single-task job tests assert their own output, in addition to declaring it in
-`expected`. Their `onRun` takes one leading argument — an `OpenJDConformanceAssert`
-embedded file — followed by the case's original command and args:
+`expected`. Such a case carries two embedded files and prepends both to its `onRun`,
+ahead of the command and args it had before instrumentation:
 
 ```yaml
+      embeddedFiles:
+      - name: OpenJDConformanceAssert
+        type: TEXT
+        dataFile: _conformance_assert.py
+      - name: OpenJDConformanceExpect
+        type: TEXT
+        data: |
+          {"expected": ["OUTPUT:1.0"]}
       actions:
         onRun:
           command: python
           args:
           - '{{Task.File.OpenJDConformanceAssert}}'
+          - '{{Task.File.OpenJDConformanceExpect}}'
           - python
           - -c
           - print(r'OUTPUT:{{Param.Version}}')
 ```
 
-The wrapper runs `sys.argv[1:]`, echoes its output verbatim, compares that output
-against literals baked into the wrapper, and exits non-zero on mismatch. The task's
-exit status then carries the verdict.
+`_conformance_assert.py` is the wrapper, one flat file shared by every instrumented
+case. It runs `sys.argv[2:]`, echoes that output verbatim, compares it against the
+lines named in `argv[1]`, and exits non-zero on mismatch. The task's exit status then
+carries the verdict.
+
+**`dataFile` is a harness convention, not part of the job template schema.** It names
+a file relative to the conformance-tests root whose contents become the embedded
+file's `data`, and a harness must resolve it before submitting the template —
+`inline_data_files()` in `run_openjd_cli_tests.py` is ten lines and is the whole of
+it. Resolving it is the only preprocessing these tests require. Because `data` is
+required on an embedded file, a harness that skips the step submits an invalid
+template and fails loudly rather than silently dropping the assertion.
+
+The expect file is JSON, and mirrors the case's own `expected` block: `expected` and
+`forbidden` for lines that hold everywhere, `expected_posix` / `expected_windows`
+(and the `forbidden_` equivalents) when the two platforms differ. The wrapper reads
+the common list plus the one for the platform it is running on.
 
 This exists so that an implementation which can only observe **task status** — a
 service, rather than a CLI whose stdout the runner can read — still verifies output
@@ -200,19 +223,23 @@ Four properties matter if you write or edit one of these:
   implementation still expands the args list, so a case whose subject *is* that
   expansion stays under test — `expr1.3.2--list-flattens-in-args` asserts
   `ARG0:--width` … `COUNT:10`, which only holds if the list flattening still happens
-  where it always did.
-- **The literals are literals.** `expected.output` holds the already-substituted
-  value (`OUTPUT:1.0`, not `OUTPUT:{{Param.Version}}`). Injecting them by parameter
+  where it always did. This is also why the wrapper is generic and the case-specific
+  data lives beside it: nothing case-specific may displace the case's own argv.
+- **The literals are literals.** The expect file holds the already-substituted value
+  (`OUTPUT:1.0`, not `OUTPUT:{{Param.Version}}`). Injecting them by parameter
   reference would make the comparison self-referential: a substitution bug would
   corrupt both sides identically and the case would pass.
 - **Diagnostics report a line's position, never its text.**
-  `OPENJD_CONFORMANCE_ASSERT_FAILED: expected output line 1 of 2 not found`. Printing
-  the literal would place it in the very output a log-scanning runner searches, so a
-  failing case would satisfy that runner with its own error message. Read the position
-  against the case's `expected` block.
+  `OPENJD_CONFORMANCE_ASSERT_FAILED: exit=0 missing=[1] of 2 forbidden=[] of 0`.
+  Printing the literal would place it in the very output a log-scanning runner
+  searches, so a failing case would satisfy that runner with its own error message.
+  Read the positions against the case's `expected` block.
 - **Braces in a literal are written `\u007b` / `\u007d`.** Embedded file data is itself
-  a format string, and several cases forbid a literal `{{Param.` in their output.
-  Written raw, that literal would be parsed as a substitution.
+  a format string and there is no escape for `{{` in a 2023-09 template — a bare
+  `{{Param.` is a validation error, and `\{\{` and a doubled `{{{{` are not escapes
+  either. Several cases forbid a literal `{{Param.` in their output; JSON's own
+  `\uXXXX` escape decodes the braces back after the format-string pass has run, which
+  is why the expect file is JSON rather than plain argv text.
 
 On success the wrapper prints `OPENJD_CONFORMANCE_ASSERT_OK: <n> expected, <m>
 forbidden`. That line is how you confirm the assertion actually ran, rather than the
@@ -245,6 +272,10 @@ To validate your OpenJD library against these tests:
 2. For `*.yaml` files (without `.invalid`): verify your library accepts them
 3. For `*.invalid.yaml` files: verify your library rejects them
 4. For job execution tests (`.test.yaml`): extract template/parameters/environments, run the job, verify outputs match `expected` assertions, and require a clean exit unless the test declares `expected.taskFailure`
+5. Resolve `dataFile` on any embedded file into that file's contents as `data` before
+   submitting the template — see "Self-asserting job tests". This is the only
+   preprocessing the tests require, and skipping it makes the affected templates
+   invalid rather than silently weaker.
 
 ### Example Test Runner for openjd CLI
 
