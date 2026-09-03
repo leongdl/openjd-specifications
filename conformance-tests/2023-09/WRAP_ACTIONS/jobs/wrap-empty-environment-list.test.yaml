@@ -1,6 +1,24 @@
 # RFC 0008: WrappedAction.Environment is an empty list when no openjd_env
 # was emitted in the session. Verifies the empty case doesn't trip the
 # wrap script's iteration logic.
+#
+# Both markers below are assembled at run time ('ENV_' + 'PRESENT=') rather
+# than written as literals. This is load-bearing, not style. A conforming CLI
+# may log the action's full argument list, and openjd-cli does exactly that on
+# Windows (openjd-sessions renders `list2cmdline(args)` at INFO, where on POSIX
+# the argument list is hidden inside a temp .sh file and only its path is
+# logged). The runner searches one captured stream for both the expected and
+# the forbidden strings, so a marker written as a literal is found in the echo
+# of this script whether or not the process ever printed it:
+#
+#   - `ENV_PRESENT=` as a literal made this test fail on Windows with
+#     `Found forbidden output: ENV_PRESENT=` while WrappedAction.Environment
+#     was in fact empty -- measured, the echoed command line read `for e in []`.
+#   - `ENV_DUMP_COMPLETE` as a literal passed its expected-output check even
+#     when the process failed to start at all -- also measured.
+#
+# Keeping the concatenation keeps both assertions about this process's stdout.
+# Do not "simplify" either one back into a literal.
 template:
   specificationVersion: jobtemplate-2023-09
   name: WrappedActionEnvironmentEmpty
@@ -30,10 +48,11 @@ environments:
           command: python
           args:
           - "-c"
-          # Print env count + a sentinel so we can confirm empty-list
-          # handling. With no openjd_env emissions, the loop body should
-          # not execute at all and only the sentinel appears.
-          - "for e in {{repr_py(WrappedAction.Environment)}}:\n print(f'ENV_PRESENT={e}')\nprint('ENV_DUMP_COMPLETE')"
+          # Print one marker per env var, then a sentinel, so we can confirm
+          # empty-list handling. With no openjd_env emissions the loop body
+          # should not execute at all and only the sentinel appears.
+          # Both markers are concatenated at run time -- see the header comment.
+          - "m='ENV_'+'PRESENT='\nfor e in {{repr_py(WrappedAction.Environment)}}:\n print(m+str(e))\nprint('ENV_'+'DUMP_COMPLETE')"
         onWrapEnvExit:
           command: python
           args:
