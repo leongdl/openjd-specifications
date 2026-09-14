@@ -1,0 +1,40 @@
+# Merging job parameter definitions intersects their constraints (§1.2.1), so the
+# narrower bound binds however late the wider one is declared.
+#
+# The job template is processed last and widens the environment template's [10, 100] to
+# [0, 1000]. The supplied 5 satisfies the job template's own minValue, so the merged
+# minimum of 10 is the only reason to refuse it. Accept twin:
+# 1.2.1--constraint-widening-int-range.test.yaml.
+#
+# The job must be refused. An implementation that lets the last definition win takes the
+# effective range as [0, 1000], finds 5 legal, and runs the task.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: TestJob
+  parameterDefinitions:
+  - name: Count
+    type: INT
+    minValue: 0
+    maxValue: 1000
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: python
+          args:
+          - -c
+          - print(r'COUNT[{{Param.Count}}]')
+environments:
+- specificationVersion: environment-2023-09
+  parameterDefinitions:
+  - name: Count
+    type: INT
+    minValue: 10
+    maxValue: 100
+  environment:
+    name: TestEnv
+    variables:
+      COUNT: '{{Param.Count}}'
+parameters:
+  Count: 5

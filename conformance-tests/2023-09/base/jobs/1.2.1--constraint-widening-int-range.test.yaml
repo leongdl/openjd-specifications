@@ -1,0 +1,43 @@
+# Merging job parameter definitions intersects their constraints (§1.2.1), so a later
+# definition may widen an earlier one and simply has no effect.
+#
+# The job template is processed after the environment template and declares the wider
+# range [0, 1000] over the environment's [10, 100]. The default 50 is inside both, which
+# isolates the merge direction from any constraint violation. Paired with
+# 1.2.1--constraint-widening-int-range-binds.invalid.test.yaml, which shows [10, 100] is
+# what binds.
+#
+# The merge must succeed and the task must print 50. An implementation reading §1.2.1 as a
+# rule about each definition rather than the result refuses the job outright.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: TestJob
+  parameterDefinitions:
+  - name: Count
+    type: INT
+    minValue: 0
+    maxValue: 1000
+    default: 50
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: python
+          args:
+          - -c
+          - print(r'COUNT[{{Param.Count}}]')
+environments:
+- specificationVersion: environment-2023-09
+  parameterDefinitions:
+  - name: Count
+    type: INT
+    minValue: 10
+    maxValue: 100
+  environment:
+    name: TestEnv
+    variables:
+      COUNT: '{{Param.Count}}'
+expected:
+  output:
+  - COUNT[50]

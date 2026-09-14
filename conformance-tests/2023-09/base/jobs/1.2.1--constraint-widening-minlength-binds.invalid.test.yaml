@@ -1,0 +1,38 @@
+# Merging job parameter definitions intersects their constraints (§1.2.1), so the stricter
+# minLength binds however late the looser one is declared.
+#
+# The job template is processed last and relaxes the environment template's minLength 5 to
+# 2. The supplied 3-character value satisfies the job template's own minLength, so the
+# merged minimum of 5 is the only reason to refuse it. Accept twin:
+# 1.2.1--constraint-widening-minlength.test.yaml.
+#
+# The job must be refused. An implementation that lets the last definition win takes the
+# effective minLength as 2, finds a 3-character value legal, and runs the task.
+template:
+  specificationVersion: jobtemplate-2023-09
+  name: TestJob
+  parameterDefinitions:
+  - name: Value
+    type: STRING
+    minLength: 2
+  steps:
+  - name: Step1
+    script:
+      actions:
+        onRun:
+          command: python
+          args:
+          - -c
+          - print(r'VALUE[{{Param.Value}}]')
+environments:
+- specificationVersion: environment-2023-09
+  parameterDefinitions:
+  - name: Value
+    type: STRING
+    minLength: 5
+  environment:
+    name: TestEnv
+    variables:
+      VAL: '{{Param.Value}}'
+parameters:
+  Value: abc
